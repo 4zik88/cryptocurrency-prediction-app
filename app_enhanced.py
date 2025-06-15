@@ -1,4 +1,12 @@
 import streamlit as st
+
+# Page config MUST be first
+st.set_page_config(
+    page_title="Cryptocurrency Price Prediction",
+    page_icon="📈",
+    layout="wide"
+)
+
 import pandas as pd
 import plotly.graph_objects as go
 from datetime import datetime, timedelta
@@ -30,14 +38,14 @@ try:
         from predictor import LSTMPredictor
         from futures_predictor import FuturesLSTMPredictor
         API_MODE = True
-        st.success("🚀 **LIVE MODE** - Using real-time API data and ML predictions!")
+        API_STATUS_MESSAGE = "🚀 **LIVE MODE** - Using real-time API data and ML predictions!"
     else:
         raise ImportError("No API credentials available")
         
 except (ImportError, Exception) as e:
     # Fall back to demo mode
     API_MODE = False
-    st.info("🚧 **DEMO MODE** - This is a demonstration version. Add your Bybit API credentials in Streamlit Cloud secrets to enable live data!")
+    API_STATUS_MESSAGE = "🚧 **DEMO MODE** - This is a demonstration version. Add your Bybit API credentials in Streamlit Cloud secrets to enable live data!"
 
 # Import translations
 try:
@@ -84,12 +92,11 @@ logging.basicConfig(level=logging.INFO,
 init_language()
 current_lang = get_current_language()
 
-# Page config
-st.set_page_config(
-    page_title=get_text("page_title", current_lang),
-    page_icon="📈",
-    layout="wide"
-)
+# Display API status message
+if API_MODE:
+    st.success(API_STATUS_MESSAGE)
+else:
+    st.info(API_STATUS_MESSAGE)
 
 # Demo data generation functions
 def generate_demo_crypto_data(symbol="BTCUSDT", days=180):
