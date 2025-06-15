@@ -72,4 +72,8 @@ logs/
 
 # Temporary files
 *.tmp
-*.temp 
+*.temp
+
+# Backup folders
+backup_*/
+backup_*/* 
