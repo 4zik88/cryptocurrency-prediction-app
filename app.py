@@ -136,9 +136,9 @@ try:
     
     st.header(get_text("prediction_summary", current_lang))
     col1, col2, col3 = st.columns(3)
-    col1.metric(get_text("current_price", current_lang), f"${current_price:,.2f}")
-    col2.metric(f"{get_text('predicted_low', current_lang)} ({selected_horizon_label})", f"${np.min(predicted_prices):,.2f}", delta_color="inverse")
-    col3.metric(f"{get_text('predicted_high', current_lang)} ({selected_horizon_label})", f"${np.max(predicted_prices):,.2f}")
+    col1.metric(get_text("current_price", current_lang), f"${current_price:,.4f}")
+    col2.metric(f"{get_text('predicted_low', current_lang)} ({selected_horizon_label})", f"${np.min(predicted_prices):,.4f}", delta_color="inverse")
+    col3.metric(f"{get_text('predicted_high', current_lang)} ({selected_horizon_label})", f"${np.max(predicted_prices):,.4f}")
     
     st.subheader(get_text("trading_signal", current_lang))
     if signal == "Long":
