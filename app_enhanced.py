@@ -123,7 +123,7 @@ else:
     predictor = get_futures_predictor(n_future_steps)
 
 # Other parameters
-lookback_days = st.sidebar.slider(get_text("historical_data_days", current_lang), min_value=30, max_value=365, value=180)
+lookback_days = st.sidebar.slider(get_text("historical_data_days", current_lang), min_value=30, max_value=365, value=365)
 threshold = st.sidebar.slider(get_text("signal_threshold", current_lang), min_value=0.1, max_value=10.0, value=2.0, step=0.1)
 
 # --- Main Content ---
@@ -192,34 +192,134 @@ try:
         # Calculate futures-specific metrics
         futures_metrics = data_loader.calculate_futures_metrics(df, current_price, predicted_prices)
         
-        # Display futures metrics in columns
+        # Main forecast metrics
+        col1, col2, col3 = st.columns(3)
+        col1.metric("💰 Current Price", f"${current_price:,.4f}")
+        
+        predicted_final = predicted_prices[-1]
+        change_final = (predicted_final - current_price) / current_price * 100
+        col2.metric(f"🎯 Exact Forecast ({selected_horizon_label})", 
+                   f"${predicted_final:,.4f}", 
+                   f"{change_final:+.2f}%")
+        
+        predicted_avg = np.mean(predicted_prices)
+        change_avg = (predicted_avg - current_price) / current_price * 100
+        col3.metric(f"📊 Average Price ({selected_horizon_label})", 
+                   f"${predicted_avg:,.4f}", 
+                   f"{change_avg:+.2f}%")
+        
+        # Detailed step-by-step forecast
+        st.subheader("📈 Step-by-Step Forecast")
+        
+        if n_future_steps > 1:
+            forecast_df = pd.DataFrame({
+                'Hour': [f"Hour {i+1}" for i in range(n_future_steps)],
+                'Predicted Price': [f"${price:,.4f}" for price in predicted_prices],
+                'Change from Current': [f"{((price - current_price) / current_price * 100):+.2f}%" for price in predicted_prices],
+                'Price Movement': [
+                    "📈 UP" if price > current_price else "📉 DOWN" if price < current_price else "➡️ FLAT"
+                    for price in predicted_prices
+                ]
+            })
+            
+            st.dataframe(
+                forecast_df,
+                use_container_width=True,
+                hide_index=True
+            )
+        else:
+            st.info(f"🎯 **Exact Forecast for next {selected_horizon_label}:** ${predicted_final:,.4f} ({change_final:+.2f}%)")
+        
+        # Summary statistics
         col1, col2, col3, col4 = st.columns(4)
-        col1.metric(get_text("current_price", current_lang), f"${current_price:,.4f}")
-        col2.metric(f"{get_text('predicted_low', current_lang)} ({selected_horizon_label})", f"${np.min(predicted_prices):,.4f}", delta_color="inverse")
-        col3.metric(f"{get_text('predicted_high', current_lang)} ({selected_horizon_label})", f"${np.max(predicted_prices):,.4f}")
+        predicted_low = np.min(predicted_prices)
+        change_low = (predicted_low - current_price) / current_price * 100
+        col1.metric("📉 Minimum Expected", f"${predicted_low:,.4f}", f"{change_low:+.2f}%")
+        
+        predicted_high = np.max(predicted_prices)
+        change_high = (predicted_high - current_price) / current_price * 100
+        col2.metric("📈 Maximum Expected", f"${predicted_high:,.4f}", f"{change_high:+.2f}%")
+        
+        price_range = predicted_high - predicted_low
+        range_pct = (price_range / current_price) * 100
+        col3.metric("📏 Price Range", f"${price_range:,.4f}", f"{range_pct:.2f}%")
+        
+        volatility = np.std(predicted_prices)
+        vol_pct = (volatility / current_price) * 100
+        col4.metric("⚡ Volatility", f"${volatility:,.4f}", f"{vol_pct:.2f}%")
         
         # Additional futures metrics
         if 'risk_reward_ratio' in futures_metrics:
-            col4.metric(get_text("risk_reward_ratio", current_lang), f"{futures_metrics['risk_reward_ratio']:.2f}")
-        
-        # Second row of metrics for futures
-        if any(key in futures_metrics for key in ['atr', 'volatility', 'volume_ratio']):
+            st.subheader("🎯 Futures-Specific Metrics")
             col5, col6, col7, col8 = st.columns(4)
+            col5.metric(get_text("risk_reward_ratio", current_lang), f"{futures_metrics['risk_reward_ratio']:.2f}")
             
             if 'atr' in futures_metrics:
-                col5.metric(get_text("atr", current_lang), f"${futures_metrics['atr']:.2f}")
+                col6.metric(get_text("atr", current_lang), f"${futures_metrics['atr']:.2f}")
             
             if 'volatility' in futures_metrics:
-                col6.metric(get_text("volatility", current_lang), f"{futures_metrics['volatility']:.4f}")
+                col7.metric(get_text("volatility", current_lang), f"{futures_metrics['volatility']:.4f}")
             
             if 'volume_ratio' in futures_metrics:
-                col7.metric(get_text("volume_ratio", current_lang), f"{futures_metrics['volume_ratio']:.2f}")
+                col8.metric(get_text("volume_ratio", current_lang), f"{futures_metrics['volume_ratio']:.2f}")
     else:
         st.header(get_text("prediction_summary", current_lang))
+        
+        # Main forecast metrics for spot
         col1, col2, col3 = st.columns(3)
-        col1.metric(get_text("current_price", current_lang), f"${current_price:,.4f}")
-        col2.metric(f"{get_text('predicted_low', current_lang)} ({selected_horizon_label})", f"${np.min(predicted_prices):,.4f}", delta_color="inverse")
-        col3.metric(f"{get_text('predicted_high', current_lang)} ({selected_horizon_label})", f"${np.max(predicted_prices):,.4f}")
+        col1.metric("💰 Current Price", f"${current_price:,.4f}")
+        
+        predicted_final = predicted_prices[-1]
+        change_final = (predicted_final - current_price) / current_price * 100
+        col2.metric(f"🎯 Exact Forecast ({selected_horizon_label})", 
+                   f"${predicted_final:,.4f}", 
+                   f"{change_final:+.2f}%")
+        
+        predicted_avg = np.mean(predicted_prices)
+        change_avg = (predicted_avg - current_price) / current_price * 100
+        col3.metric(f"📊 Average Price ({selected_horizon_label})", 
+                   f"${predicted_avg:,.4f}", 
+                   f"{change_avg:+.2f}%")
+        
+        # Detailed step-by-step forecast
+        st.subheader("📈 Step-by-Step Forecast")
+        
+        if n_future_steps > 1:
+            forecast_df = pd.DataFrame({
+                'Hour': [f"Hour {i+1}" for i in range(n_future_steps)],
+                'Predicted Price': [f"${price:,.4f}" for price in predicted_prices],
+                'Change from Current': [f"{((price - current_price) / current_price * 100):+.2f}%" for price in predicted_prices],
+                'Price Movement': [
+                    "📈 UP" if price > current_price else "📉 DOWN" if price < current_price else "➡️ FLAT"
+                    for price in predicted_prices
+                ]
+            })
+            
+            st.dataframe(
+                forecast_df,
+                use_container_width=True,
+                hide_index=True
+            )
+        else:
+            st.info(f"🎯 **Exact Forecast for next {selected_horizon_label}:** ${predicted_final:,.4f} ({change_final:+.2f}%)")
+        
+        # Summary statistics
+        col1, col2, col3, col4 = st.columns(4)
+        predicted_low = np.min(predicted_prices)
+        change_low = (predicted_low - current_price) / current_price * 100
+        col1.metric("📉 Minimum Expected", f"${predicted_low:,.4f}", f"{change_low:+.2f}%")
+        
+        predicted_high = np.max(predicted_prices)
+        change_high = (predicted_high - current_price) / current_price * 100
+        col2.metric("📈 Maximum Expected", f"${predicted_high:,.4f}", f"{change_high:+.2f}%")
+        
+        price_range = predicted_high - predicted_low
+        range_pct = (price_range / current_price) * 100
+        col3.metric("📏 Price Range", f"${price_range:,.4f}", f"{range_pct:.2f}%")
+        
+        volatility = np.std(predicted_prices)
+        vol_pct = (volatility / current_price) * 100
+        col4.metric("⚡ Volatility", f"${volatility:,.4f}", f"{vol_pct:.2f}%")
     
     st.subheader(get_text("trading_signal", current_lang))
     if signal == "Long":

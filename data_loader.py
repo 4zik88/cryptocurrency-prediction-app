@@ -3,8 +3,10 @@ from datetime import datetime, timedelta
 import pandas as pd
 import numpy as np
 from pybit.unified_trading import HTTP
-from ta.trend import SMAIndicator
-from ta.momentum import RSIIndicator
+from ta.trend import SMAIndicator, MACD, EMAIndicator
+from ta.momentum import RSIIndicator, StochasticOscillator, WilliamsRIndicator
+from ta.volatility import BollingerBands, AverageTrueRange
+from ta.volume import OnBalanceVolumeIndicator, VolumePriceTrendIndicator
 from sklearn.preprocessing import MinMaxScaler
 from dotenv import load_dotenv
 import logging
@@ -116,26 +118,79 @@ class DataLoader:
             return pd.DataFrame()
 
     def add_technical_indicators(self, df):
-        """Add technical indicators to the dataframe."""
+        """Add comprehensive technical indicators to the dataframe."""
         if df.empty:
             logging.warning("Empty dataframe provided to add_technical_indicators")
             return df
             
         try:
-            # Calculate SMA
-            sma_20 = SMAIndicator(df['close'], window=20)
-            sma_50 = SMAIndicator(df['close'], window=50)
-            df['sma_20'] = sma_20.sma_indicator()
-            df['sma_50'] = sma_50.sma_indicator()
+            # Moving Averages
+            df['sma_20'] = SMAIndicator(df['close'], window=20).sma_indicator()
+            df['sma_50'] = SMAIndicator(df['close'], window=50).sma_indicator()
+            df['ema_12'] = EMAIndicator(df['close'], window=12).ema_indicator()
+            df['ema_26'] = EMAIndicator(df['close'], window=26).ema_indicator()
             
-            # Calculate RSI
-            rsi = RSIIndicator(df['close'], window=14)
-            df['rsi'] = rsi.rsi()
+            # Momentum Indicators
+            df['rsi'] = RSIIndicator(df['close'], window=14).rsi()
             
-            # Add price changes
+            # MACD
+            macd = MACD(df['close'])
+            df['macd'] = macd.macd()
+            df['macd_signal'] = macd.macd_signal()
+            df['macd_histogram'] = macd.macd_diff()
+            
+            # Stochastic Oscillator
+            stoch = StochasticOscillator(df['high'], df['low'], df['close'])
+            df['stoch_k'] = stoch.stoch()
+            df['stoch_d'] = stoch.stoch_signal()
+            
+            # Williams %R
+            df['williams_r'] = WilliamsRIndicator(df['high'], df['low'], df['close']).williams_r()
+            
+            # Bollinger Bands
+            bb = BollingerBands(df['close'])
+            df['bb_upper'] = bb.bollinger_hband()
+            df['bb_middle'] = bb.bollinger_mavg()
+            df['bb_lower'] = bb.bollinger_lband()
+            df['bb_width'] = (df['bb_upper'] - df['bb_lower']) / df['bb_middle']
+            df['bb_position'] = (df['close'] - df['bb_lower']) / (df['bb_upper'] - df['bb_lower'])
+            
+            # Average True Range (Volatility)
+            df['atr'] = AverageTrueRange(df['high'], df['low'], df['close']).average_true_range()
+            
+            # Volume Indicators
+            df['obv'] = OnBalanceVolumeIndicator(df['close'], df['volume']).on_balance_volume()
+            df['volume_price_trend'] = VolumePriceTrendIndicator(df['close'], df['volume']).volume_price_trend()
+            df['volume_sma'] = df['volume'].rolling(window=20).mean()  # Manual volume SMA
+            
+            # Price Action Features
             df['price_change'] = df['close'].pct_change()
+            df['price_momentum_3'] = df['close'].pct_change(3)
+            df['price_momentum_12'] = df['close'].pct_change(12)
+            df['price_momentum_24'] = df['close'].pct_change(24)
             
-            logging.info("Successfully added technical indicators")
+            # Volatility Features
+            df['volatility_3'] = df['close'].rolling(3).std()
+            df['volatility_12'] = df['close'].rolling(12).std()
+            df['volatility_24'] = df['close'].rolling(24).std()
+            
+            # Volume Features
+            df['volume_change'] = df['volume'].pct_change()
+            df['volume_price_avg'] = (df['volume'] * df['close']).rolling(24).mean()
+            
+            # Market Microstructure
+            df['high_low_ratio'] = df['high'] / df['low']
+            df['open_close_ratio'] = df['open'] / df['close']
+            df['body_size'] = abs(df['close'] - df['open']) / df['open']
+            df['upper_shadow'] = (df['high'] - df[['open', 'close']].max(axis=1)) / df['open']
+            df['lower_shadow'] = (df[['open', 'close']].min(axis=1) - df['low']) / df['open']
+            
+            # Support and Resistance
+            df['pivot_point'] = (df['high'] + df['low'] + df['close']) / 3
+            df['resistance_1'] = 2 * df['pivot_point'] - df['low']
+            df['support_1'] = 2 * df['pivot_point'] - df['high']
+            
+            logging.info("Successfully added comprehensive technical indicators")
             return df
         except Exception as e:
             logging.error(f"Error in add_technical_indicators: {str(e)}")
@@ -148,9 +203,16 @@ class DataLoader:
             return None, None, None, None, None
             
         try:
-            # Select features for training
+            # Select only the original 6 features to match the model's expectations
             features = ['close', 'volume', 'sma_20', 'sma_50', 'rsi', 'price_change']
-            data = df[features].copy()
+            
+            # Ensure all features exist in the dataframe
+            available_features = [f for f in features if f in df.columns]
+            if len(available_features) < len(features):
+                missing_features = set(features) - set(available_features)
+                logging.warning(f"Missing features: {missing_features}")
+            
+            data = df[available_features].copy()
             
             # Handle missing values
             data = data.dropna()
@@ -248,4 +310,179 @@ class DataLoader:
             
         except Exception as e:
             logging.error(f"Error in get_available_pairs: {str(e)}")
-            return [] 
+            return []
+    
+    def fetch_multi_timeframe_data(self, symbol, timeframes=['60', '240', 'D'], lookback_days=180):
+        """Fetch data from multiple timeframes for context."""
+        multi_data = {}
+        try:
+            for tf in timeframes:
+                logging.info(f"Fetching {tf} timeframe data for {symbol}")
+                df = self.fetch_historical_data(symbol, interval=tf, lookback_days=lookback_days)
+                if not df.empty:
+                    df = self.add_technical_indicators(df)
+                    # Add timeframe-specific suffix to column names (except OHLCV)
+                    base_cols = ['open', 'high', 'low', 'close', 'volume', 'turnover']
+                    for col in df.columns:
+                        if col not in base_cols:
+                            df[f'{col}_{tf}'] = df[col]
+                            df = df.drop(columns=[col])
+                    multi_data[tf] = df
+                else:
+                    logging.warning(f"No data received for {symbol} at {tf} timeframe")
+            
+            logging.info(f"Successfully fetched multi-timeframe data for {len(multi_data)} timeframes")
+            return multi_data
+        except Exception as e:
+            logging.error(f"Error in fetch_multi_timeframe_data: {str(e)}")
+            return {}
+    
+    def add_market_regime_detection(self, df):
+        """Add market regime detection features."""
+        try:
+            if df.empty:
+                return df
+                
+            # Volatility regime
+            df['vol_20'] = df['close'].rolling(20).std()
+            df['vol_percentile'] = df['vol_20'].rolling(100).rank(pct=True)
+            df['volatility_regime'] = pd.cut(df['vol_percentile'], 
+                                           bins=[0, 0.33, 0.66, 1.0], 
+                                           labels=['Low', 'Medium', 'High'])
+            
+            # Trend regime
+            df['trend_20'] = df['close'].rolling(20).mean()
+            df['trend_50'] = df['close'].rolling(50).mean()
+            df['trend_strength'] = (df['trend_20'] - df['trend_50']) / df['trend_50']
+            df['trend_regime'] = pd.cut(df['trend_strength'], 
+                                      bins=[-np.inf, -0.02, 0.02, np.inf], 
+                                      labels=['Bear', 'Sideways', 'Bull'])
+            
+            # Volume regime
+            df['volume_20'] = df['volume'].rolling(20).mean()
+            df['volume_ratio'] = df['volume'] / df['volume_20']
+            df['volume_regime'] = pd.cut(df['volume_ratio'], 
+                                       bins=[0, 0.8, 1.2, np.inf], 
+                                       labels=['Low', 'Normal', 'High'])
+            
+            # Convert categorical to numerical
+            df['volatility_regime_num'] = pd.Categorical(df['volatility_regime']).codes
+            df['trend_regime_num'] = pd.Categorical(df['trend_regime']).codes
+            df['volume_regime_num'] = pd.Categorical(df['volume_regime']).codes
+            
+            logging.info("Successfully added market regime detection features")
+            return df
+        except Exception as e:
+            logging.error(f"Error in add_market_regime_detection: {str(e)}")
+            return df
+    
+    def calculate_risk_metrics(self, predictions, current_price):
+        """Calculate comprehensive risk metrics."""
+        try:
+            if len(predictions) == 0:
+                return {}
+                
+            predictions = np.array(predictions)
+            returns = (predictions - current_price) / current_price * 100
+            
+            metrics = {
+                'var_95': np.percentile(returns, 5),
+                'var_99': np.percentile(returns, 1),
+                'expected_shortfall_95': np.mean(returns[returns <= np.percentile(returns, 5)]),
+                'expected_shortfall_99': np.mean(returns[returns <= np.percentile(returns, 1)]),
+                'max_potential_loss': np.min(returns),
+                'max_potential_gain': np.max(returns),
+                'mean_return': np.mean(returns),
+                'volatility': np.std(returns),
+                'skewness': self._calculate_skewness(returns),
+                'kurtosis': self._calculate_kurtosis(returns),
+                'downside_deviation': np.std(returns[returns < 0]) if len(returns[returns < 0]) > 0 else 0,
+                'upside_deviation': np.std(returns[returns > 0]) if len(returns[returns > 0]) > 0 else 0,
+                'probability_of_loss': len(returns[returns < 0]) / len(returns) * 100,
+                'probability_of_gain': len(returns[returns > 0]) / len(returns) * 100
+            }
+            
+            # Calculate Sharpe ratio (assuming risk-free rate of 0%)
+            if metrics['volatility'] > 0:
+                metrics['sharpe_ratio'] = metrics['mean_return'] / metrics['volatility']
+            else:
+                metrics['sharpe_ratio'] = 0
+            
+            # Calculate Sortino ratio
+            if metrics['downside_deviation'] > 0:
+                metrics['sortino_ratio'] = metrics['mean_return'] / metrics['downside_deviation']
+            else:
+                metrics['sortino_ratio'] = 0
+            
+            logging.info("Successfully calculated risk metrics")
+            return metrics
+        except Exception as e:
+            logging.error(f"Error calculating risk metrics: {str(e)}")
+            return {}
+    
+    def _calculate_skewness(self, data):
+        """Calculate skewness of data."""
+        try:
+            n = len(data)
+            if n < 3:
+                return 0
+            mean = np.mean(data)
+            std = np.std(data)
+            if std == 0:
+                return 0
+            return n / ((n-1) * (n-2)) * np.sum(((data - mean) / std) ** 3)
+        except:
+            return 0
+    
+    def _calculate_kurtosis(self, data):
+        """Calculate kurtosis of data."""
+        try:
+            n = len(data)
+            if n < 4:
+                return 0
+            mean = np.mean(data)
+            std = np.std(data)
+            if std == 0:
+                return 0
+            kurt = n * (n+1) / ((n-1) * (n-2) * (n-3)) * np.sum(((data - mean) / std) ** 4)
+            kurt -= 3 * (n-1)**2 / ((n-2) * (n-3))
+            return kurt
+        except:
+            return 0
+    
+    def get_correlation_data(self, symbol, major_coins=['BTCUSDT', 'ETHUSDT'], lookback_days=30):
+        """Get correlation data with major cryptocurrencies."""
+        try:
+            correlations = {}
+            main_data = self.fetch_historical_data(symbol, lookback_days=lookback_days)
+            
+            if main_data.empty:
+                return correlations
+                
+            for coin in major_coins:
+                if coin != symbol:
+                    try:
+                        coin_data = self.fetch_historical_data(coin, lookback_days=lookback_days)
+                        if not coin_data.empty:
+                            # Align timestamps
+                            common_index = main_data.index.intersection(coin_data.index)
+                            if len(common_index) > 10:  # Need sufficient data points
+                                main_prices = main_data.loc[common_index, 'close']
+                                coin_prices = coin_data.loc[common_index, 'close']
+                                correlation = np.corrcoef(main_prices, coin_prices)[0, 1]
+                                correlations[f'{coin}_correlation'] = correlation
+                                
+                                # Also calculate rolling correlation
+                                main_returns = main_prices.pct_change().dropna()
+                                coin_returns = coin_prices.pct_change().dropna()
+                                if len(main_returns) > 5:
+                                    rolling_corr = main_returns.rolling(7).corr(coin_returns).iloc[-1]
+                                    correlations[f'{coin}_rolling_correlation'] = rolling_corr
+                    except Exception as e:
+                        logging.warning(f"Could not calculate correlation with {coin}: {str(e)}")
+                        
+            logging.info(f"Successfully calculated correlations with {len(correlations)} pairs")
+            return correlations
+        except Exception as e:
+            logging.error(f"Error in get_correlation_data: {str(e)}")
+            return {}

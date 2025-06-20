@@ -123,7 +123,7 @@ else:
     predictor = get_futures_predictor(n_future_steps)
 
 # Other parameters
-lookback_days = st.sidebar.slider(get_text("historical_data_days", current_lang), min_value=30, max_value=365, value=180)
+lookback_days = st.sidebar.slider(get_text("historical_data_days", current_lang), min_value=30, max_value=365, value=365)
 threshold = st.sidebar.slider(get_text("signal_threshold", current_lang), min_value=0.1, max_value=10.0, value=2.0, step=0.1)
 
 # --- Main Content ---
