@@ -310,7 +310,7 @@ class DataLoader:
             
         except Exception as e:
             logging.error(f"Error in get_available_pairs: {str(e)}")
-            return []
+            return [] 
     
     def fetch_multi_timeframe_data(self, symbol, timeframes=['60', '240', 'D'], lookback_days=180):
         """Fetch data from multiple timeframes for context."""
