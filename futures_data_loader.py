@@ -18,12 +18,23 @@ load_dotenv()
 
 class FuturesDataLoader:
     def __init__(self):
-        self.api_key = os.getenv('BYBIT_API_KEY', '')
-        self.api_secret = os.getenv('BYBIT_API_SECRET', '')
+        # Try to get API keys from Streamlit secrets first, then environment variables
+        try:
+            import streamlit as st
+            self.api_key = st.secrets.get('BYBIT_API_KEY', '') or os.getenv('BYBIT_API_KEY', '')
+            self.api_secret = st.secrets.get('BYBIT_API_SECRET', '') or os.getenv('BYBIT_API_SECRET', '')
+        except ImportError:
+            # Streamlit not available, use environment variables only
+            self.api_key = os.getenv('BYBIT_API_KEY', '')
+            self.api_secret = os.getenv('BYBIT_API_SECRET', '')
+        except Exception:
+            # Fallback to environment variables
+            self.api_key = os.getenv('BYBIT_API_KEY', '')
+            self.api_secret = os.getenv('BYBIT_API_SECRET', '')
         
         if not self.api_key or not self.api_secret:
-            logging.error("API credentials not found in .env file")
-            raise ValueError("API credentials not found. Please check your .env file.")
+            logging.error("API credentials not found. Please check your Streamlit secrets or .env file")
+            raise ValueError("API credentials not found. Please check your Streamlit secrets or .env file.")
             
         try:
             self.client = HTTP(
