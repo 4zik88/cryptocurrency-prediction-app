@@ -64,6 +64,8 @@ class DataLoader:
         start_time = end_time - timedelta(days=lookback_days)
         
         try:
+            import time
+            
             # Convert interval to API format
             interval_map = {
                 '1': '1',
@@ -79,15 +81,35 @@ class DataLoader:
             
             api_interval = interval_map.get(interval, '60')
             
-            # Fetch kline data
-            response = self.client.get_kline(
-                category="spot",
-                symbol=symbol,
-                interval=api_interval,
-                limit=1000,
-                start=int(start_time.timestamp() * 1000),
-                end=int(end_time.timestamp() * 1000)
-            )
+            # Add retry logic for rate limiting
+            max_retries = 3
+            retry_delay = 2
+            
+            for attempt in range(max_retries):
+                try:
+                    # Add small delay to avoid rate limiting
+                    if attempt > 0:
+                        time.sleep(retry_delay * attempt)
+                    
+                    # Fetch kline data
+                    response = self.client.get_kline(
+                        category="spot",
+                        symbol=symbol,
+                        interval=api_interval,
+                        limit=1000,
+                        start=int(start_time.timestamp() * 1000),
+                        end=int(end_time.timestamp() * 1000)
+                    )
+                    
+                    # If successful, break out of retry loop
+                    break
+                    
+                except Exception as api_error:
+                    if "rate limit" in str(api_error).lower() and attempt < max_retries - 1:
+                        logging.warning(f"Rate limit hit, retrying in {retry_delay * (attempt + 1)} seconds...")
+                        continue
+                    else:
+                        raise api_error
             
             if 'retCode' in response and response['retCode'] != 0:
                 logging.error(f"API Error: {response.get('retMsg', 'Unknown error')}")
