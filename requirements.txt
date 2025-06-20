@@ -1,11 +1,11 @@
-tensorflow>=2.13.0,<2.16.0
+tensorflow==2.12.1
 streamlit>=1.28.0
 pybit>=5.6.0
-pandas>=1.5.3,<2.1.0
-numpy>=1.23.5,<1.25.0
+pandas>=1.5.0,<2.1.0
+numpy>=1.21.0,<1.25.0
 python-dotenv>=1.0.0
 ta>=0.10.2
-scikit-learn>=1.2.2,<1.4.0
+scikit-learn>=1.2.0,<1.4.0
 plotly>=5.17.0
 protobuf>=3.20.0,<4.0.0
 requests>=2.28.0
