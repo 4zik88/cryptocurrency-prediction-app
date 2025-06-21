@@ -371,12 +371,14 @@ try:
     )
     st.plotly_chart(fig, use_container_width=True)
 
-    # Additional futures-specific charts
-    if market_type == "futures" and 'macd' in df.columns:
-        st.subheader("MACD Indicator (Futures)")
+    # Additional technical indicator charts
+    recent_data = df.iloc[-100:]  # Last 100 data points
+    
+    # MACD Indicator
+    if 'macd' in df.columns:
+        st.subheader("📊 MACD Indicator")
         fig_macd = go.Figure()
         
-        recent_data = df.iloc[-100:]  # Last 100 data points
         fig_macd.add_trace(go.Scatter(
             x=recent_data.index, y=recent_data['macd'], 
             name="MACD", line=dict(color='blue')
@@ -393,9 +395,65 @@ try:
         fig_macd.update_layout(
             title="MACD Analysis",
             xaxis_title=get_text("date", current_lang),
-            template='plotly_dark'
+            template='plotly_dark',
+            height=400
         )
         st.plotly_chart(fig_macd, use_container_width=True)
+    
+    # Stochastic Oscillator
+    if 'stoch_k' in df.columns and 'stoch_d' in df.columns:
+        st.subheader("📈 Stochastic Oscillator")
+        fig_stoch = go.Figure()
+        
+        fig_stoch.add_trace(go.Scatter(
+            x=recent_data.index, y=recent_data['stoch_k'], 
+            name="%K (Fast)", line=dict(color='blue', width=2)
+        ))
+        fig_stoch.add_trace(go.Scatter(
+            x=recent_data.index, y=recent_data['stoch_d'], 
+            name="%D (Slow)", line=dict(color='red', width=2)
+        ))
+        
+        # Add overbought/oversold levels
+        fig_stoch.add_hline(y=80, line_dash="dash", line_color="gray", 
+                           annotation_text="Overbought (80)")
+        fig_stoch.add_hline(y=20, line_dash="dash", line_color="gray", 
+                           annotation_text="Oversold (20)")
+        fig_stoch.add_hline(y=50, line_dash="dot", line_color="lightgray", 
+                           annotation_text="Midline (50)", opacity=0.5)
+        
+        # Fill areas for overbought/oversold zones
+        fig_stoch.add_hrect(y0=80, y1=100, fillcolor="red", opacity=0.1, 
+                           annotation_text="Overbought Zone", annotation_position="top left")
+        fig_stoch.add_hrect(y0=0, y1=20, fillcolor="green", opacity=0.1, 
+                           annotation_text="Oversold Zone", annotation_position="bottom left")
+        
+        fig_stoch.update_layout(
+            title="Stochastic Oscillator (%K and %D)",
+            xaxis_title=get_text("date", current_lang),
+            yaxis_title="Value (%)",
+            template='plotly_dark',
+            height=400,
+            yaxis=dict(range=[0, 100])
+        )
+        st.plotly_chart(fig_stoch, use_container_width=True)
+        
+        # Add interpretation
+        latest_k = recent_data['stoch_k'].iloc[-1]
+        latest_d = recent_data['stoch_d'].iloc[-1]
+        
+        if latest_k > 80 and latest_d > 80:
+            st.warning("⚠️ **Signal**: Asset in overbought zone. Possible price decline.")
+        elif latest_k < 20 and latest_d < 20:
+            st.success("💡 **Signal**: Asset in oversold zone. Possible price bounce.")
+        elif latest_k > latest_d and latest_k > 50:
+            st.info("📈 **Signal**: %K above %D and above 50 - bullish signal.")
+        elif latest_k < latest_d and latest_k < 50:
+            st.info("📉 **Signal**: %K below %D and below 50 - bearish signal.")
+        else:
+            st.info("➡️ **Status**: Neutral stochastic oscillator readings.")
+        
+        st.caption(f"Current values: %K = {latest_k:.2f}, %D = {latest_d:.2f}")
 
 except Exception as e:
     logging.error(f"Application error: {str(e)}")

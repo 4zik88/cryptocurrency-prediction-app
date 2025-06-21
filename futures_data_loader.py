@@ -4,7 +4,7 @@ import pandas as pd
 import numpy as np
 from pybit.unified_trading import HTTP
 from ta.trend import SMAIndicator, EMAIndicator
-from ta.momentum import RSIIndicator
+from ta.momentum import RSIIndicator, StochasticOscillator
 from ta.volatility import BollingerBands
 from sklearn.preprocessing import MinMaxScaler
 from dotenv import load_dotenv
@@ -210,6 +210,11 @@ class FuturesDataLoader:
             rsi = RSIIndicator(df['close'], window=14)
             df['rsi'] = rsi.rsi()
             
+            # Stochastic Oscillator
+            stoch = StochasticOscillator(df['high'], df['low'], df['close'])
+            df['stoch_k'] = stoch.stoch()
+            df['stoch_d'] = stoch.stoch_signal()
+            
             # Bollinger Bands
             bb = BollingerBands(df['close'], window=20, window_dev=2)
             df['bb_upper'] = bb.bollinger_hband()
@@ -251,7 +256,7 @@ class FuturesDataLoader:
             return None, None, None, None, None
             
         try:
-            # Select features for training (more comprehensive for futures)
+            # Select features for training (compatible with existing model - 15 features)
             features = [
                 'close', 'volume', 'sma_20', 'sma_50', 'ema_12', 'ema_26',
                 'macd', 'macd_signal', 'rsi', 'bb_width', 'price_change',
