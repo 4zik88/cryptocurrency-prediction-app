@@ -18,12 +18,23 @@ load_dotenv()
 
 class FuturesDataLoader:
     def __init__(self):
-        self.api_key = os.getenv('BYBIT_API_KEY', '')
-        self.api_secret = os.getenv('BYBIT_API_SECRET', '')
+        # Try to get API keys from Streamlit secrets first, then environment variables
+        try:
+            import streamlit as st
+            self.api_key = st.secrets.get('BYBIT_API_KEY', '') or os.getenv('BYBIT_API_KEY', '')
+            self.api_secret = st.secrets.get('BYBIT_API_SECRET', '') or os.getenv('BYBIT_API_SECRET', '')
+        except ImportError:
+            # Streamlit not available, use environment variables only
+            self.api_key = os.getenv('BYBIT_API_KEY', '')
+            self.api_secret = os.getenv('BYBIT_API_SECRET', '')
+        except Exception:
+            # Fallback to environment variables
+            self.api_key = os.getenv('BYBIT_API_KEY', '')
+            self.api_secret = os.getenv('BYBIT_API_SECRET', '')
         
         if not self.api_key or not self.api_secret:
-            logging.error("API credentials not found in .env file")
-            raise ValueError("API credentials not found. Please check your .env file.")
+            logging.error("API credentials not found. Please check your Streamlit secrets or .env file")
+            raise ValueError("API credentials not found. Please check your Streamlit secrets or .env file.")
             
         try:
             self.client = HTTP(
@@ -52,6 +63,8 @@ class FuturesDataLoader:
         start_time = end_time - timedelta(days=lookback_days)
         
         try:
+            import time
+            
             # Convert interval to API format
             interval_map = {
                 '1': '1',
@@ -67,15 +80,35 @@ class FuturesDataLoader:
             
             api_interval = interval_map.get(interval, '60')
             
-            # Fetch futures kline data
-            response = self.client.get_kline(
-                category="linear",  # Linear futures
-                symbol=symbol,
-                interval=api_interval,
-                limit=1000,
-                start=int(start_time.timestamp() * 1000),
-                end=int(end_time.timestamp() * 1000)
-            )
+            # Add retry logic for rate limiting
+            max_retries = 3
+            retry_delay = 2
+            
+            for attempt in range(max_retries):
+                try:
+                    # Add small delay to avoid rate limiting
+                    if attempt > 0:
+                        time.sleep(retry_delay * attempt)
+                    
+                    # Fetch futures kline data
+                    response = self.client.get_kline(
+                        category="linear",  # Linear futures
+                        symbol=symbol,
+                        interval=api_interval,
+                        limit=1000,
+                        start=int(start_time.timestamp() * 1000),
+                        end=int(end_time.timestamp() * 1000)
+                    )
+                    
+                    # If successful, break out of retry loop
+                    break
+                    
+                except Exception as api_error:
+                    if "rate limit" in str(api_error).lower() and attempt < max_retries - 1:
+                        logging.warning(f"Rate limit hit, retrying in {retry_delay * (attempt + 1)} seconds...")
+                        continue
+                    else:
+                        raise api_error
             
             if 'retCode' in response and response['retCode'] != 0:
                 logging.error(f"API Error: {response.get('retMsg', 'Unknown error')}")
