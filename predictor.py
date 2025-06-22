@@ -28,8 +28,8 @@ class LSTMPredictor:
             Dense(units=self.n_future_steps)
         ])
         
-        # Use legacy Adam optimizer for M1/M2 Mac compatibility
-        optimizer = tf.keras.optimizers.legacy.Adam(learning_rate=0.001)
+        # Use standard Adam optimizer (Keras 3 compatible)
+        optimizer = tf.keras.optimizers.Adam(learning_rate=0.001)
         
         model.compile(optimizer=optimizer, loss='mean_squared_error')
         logging.info(f"Successfully built LSTM model for {self.n_future_steps} future steps.")

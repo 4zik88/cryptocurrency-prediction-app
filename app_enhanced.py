@@ -103,6 +103,7 @@ time_horizons = {
     get_text("1_hour", current_lang): 1,
     get_text("4_hours", current_lang): 4,
     get_text("8_hours", current_lang): 8,
+    get_text("12_hours", current_lang): 12,
     get_text("1_day", current_lang): 24,
 }
 selected_horizon_label = st.sidebar.selectbox(get_text("select_prediction_horizon", current_lang), list(time_horizons.keys()))

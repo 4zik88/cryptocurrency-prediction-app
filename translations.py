@@ -22,6 +22,7 @@ TRANSLATIONS = {
         "1_hour": "1 Hour",
         "4_hours": "4 Hours", 
         "8_hours": "8 Hours",
+        "12_hours": "12 Hours",
         "1_day": "1 Day (24H)",
         
         # Main content
@@ -86,7 +87,8 @@ TRANSLATIONS = {
         # Time horizons
         "1_hour": "1 година",
         "4_hours": "4 години",
-        "8_hours": "8 годин", 
+        "8_hours": "8 годин",
+        "12_hours": "12 годин",
         "1_day": "1 день (24г)",
         
         # Main content
