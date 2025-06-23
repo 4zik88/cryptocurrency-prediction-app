@@ -17,6 +17,7 @@ TRANSLATIONS = {
         "historical_data_days": "Historical Data (days)",
         "signal_threshold": "Signal Threshold (%)",
         "language": "Language",
+        "reset_filters": "Reset Filters",
         
         # Time horizons
         "1_hour": "1 Hour",
@@ -83,6 +84,7 @@ TRANSLATIONS = {
         "historical_data_days": "Історичні дані (дні)",
         "signal_threshold": "Поріг сигналу (%)",
         "language": "Мова",
+        "reset_filters": "Скинути фільтри",
         
         # Time horizons
         "1_hour": "1 година",

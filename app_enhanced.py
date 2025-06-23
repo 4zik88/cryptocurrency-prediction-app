@@ -41,73 +41,150 @@ def get_futures_data_loader():
         st.error(f"{get_text('failed_initialize_dataloader', current_lang)} {str(e)}")
         st.stop()
 
+# --- State Management ---
+def initialize_state():
+    """Initialize session state for filters if they don't exist."""
+    if 'filters_initialized' not in st.session_state:
+        st.session_state.filters_initialized = True
+        # Store language-independent values
+        st.session_state.market_type = "spot"
+        st.session_state.symbol = "BTCUSDT"
+        st.session_state.n_future_steps = 1
+        st.session_state.lookback_days = 365
+        st.session_state.threshold = 2.0
+
+def reset_filters():
+    """Reset all filter values to defaults."""
+    st.session_state.market_type = "spot"
+    st.session_state.symbol = "BTCUSDT"
+    st.session_state.n_future_steps = 1
+    st.session_state.lookback_days = 365
+    st.session_state.threshold = 2.0
+    st.rerun()
+
+# Initialize state at the beginning of the script
+initialize_state()
+
 # --- Sidebar Configuration ---
 st.sidebar.title(get_text("configuration", current_lang))
 
 # Language switcher
 languages = {"English": "en", "Українська": "uk"}
-selected_language = st.sidebar.selectbox(
+selected_language_label = st.sidebar.selectbox(
     get_text("language", current_lang),
     list(languages.keys()),
     index=0 if current_lang == "en" else 1
 )
-
-if languages[selected_language] != current_lang:
-    set_language(languages[selected_language])
+if languages[selected_language_label] != current_lang:
+    set_language(languages[selected_language_label])
     st.rerun()
 
-# Update current language after potential change
-current_lang = get_current_language()
-
 # Market Type Selection
-market_types = {
+market_types_map = {
     get_text("spot_market", current_lang): "spot",
     get_text("futures_market", current_lang): "futures"
 }
-selected_market_type = st.sidebar.selectbox(
+market_display_options = list(market_types_map.keys())
+market_internal_values = list(market_types_map.values())
+
+# Find current market index
+try:
+    current_market_index = market_internal_values.index(st.session_state.market_type)
+except (ValueError, KeyError):
+    current_market_index = 0
+    st.session_state.market_type = "spot"
+
+selected_market_display = st.sidebar.selectbox(
     get_text("select_market_type", current_lang),
-    list(market_types.keys())
+    market_display_options,
+    index=current_market_index
 )
-market_type = market_types[selected_market_type]
+st.session_state.market_type = market_types_map[selected_market_display]
 
 # Initialize appropriate data loader based on market type
-if market_type == "spot":
-    data_loader = get_spot_data_loader()
-    st.session_state.data_loader = data_loader
-else:
-    data_loader = get_futures_data_loader()
-    st.session_state.futures_data_loader = data_loader
+data_loader = get_spot_data_loader() if st.session_state.market_type == "spot" else get_futures_data_loader()
 
 # Dynamic Symbol selection based on market type
-cache_key = f'available_pairs_{market_type}'
+cache_key = f'available_pairs_{st.session_state.market_type}'
 if cache_key not in st.session_state:
-    if market_type == "spot":
-        st.session_state[cache_key] = data_loader.get_available_pairs()
-    else:
-        st.session_state[cache_key] = data_loader.get_futures_pairs()
+    with st.spinner("Fetching available pairs..."):
+        if st.session_state.market_type == "spot":
+            st.session_state[cache_key] = data_loader.get_available_pairs()
+        else:
+            st.session_state[cache_key] = data_loader.get_futures_pairs()
+
+available_symbols = st.session_state.get(cache_key, ["BTCUSDT"])
+
+# Ensure stored symbol is valid for current market type
+if st.session_state.symbol not in available_symbols:
+    st.session_state.symbol = available_symbols[0] if available_symbols else "BTCUSDT"
+
+# Find current symbol index
+try:
+    current_symbol_index = available_symbols.index(st.session_state.symbol)
+except (ValueError, KeyError):
+    current_symbol_index = 0
+    st.session_state.symbol = available_symbols[0] if available_symbols else "BTCUSDT"
 
 symbol = st.sidebar.selectbox(
     get_text("select_cryptocurrency", current_lang),
-    st.session_state[cache_key] if st.session_state[cache_key] else ["BTCUSDT"]
+    available_symbols,
+    index=current_symbol_index
 )
+st.session_state.symbol = symbol
 
 if st.sidebar.button(get_text("refresh_pairs", current_lang)):
-    if market_type == "spot":
-        st.session_state[cache_key] = data_loader.get_available_pairs()
-    else:
-        st.session_state[cache_key] = data_loader.get_futures_pairs()
+    if cache_key in st.session_state:
+        del st.session_state[cache_key]
     st.rerun()
 
 # Prediction Horizon Selection
-time_horizons = {
+time_horizons_map = {
     get_text("1_hour", current_lang): 1,
     get_text("4_hours", current_lang): 4,
     get_text("8_hours", current_lang): 8,
     get_text("12_hours", current_lang): 12,
     get_text("1_day", current_lang): 24,
 }
-selected_horizon_label = st.sidebar.selectbox(get_text("select_prediction_horizon", current_lang), list(time_horizons.keys()))
-n_future_steps = time_horizons[selected_horizon_label]
+horizon_display_options = list(time_horizons_map.keys())
+horizon_internal_values = list(time_horizons_map.values())
+
+# Find current horizon index
+try:
+    current_horizon_index = horizon_internal_values.index(st.session_state.n_future_steps)
+except (ValueError, KeyError):
+    current_horizon_index = 0
+    st.session_state.n_future_steps = 1
+
+selected_horizon_display = st.sidebar.selectbox(
+    get_text("select_prediction_horizon", current_lang), 
+    horizon_display_options,
+    index=current_horizon_index
+)
+st.session_state.n_future_steps = time_horizons_map[selected_horizon_display]
+
+# Other parameters with state preservation
+lookback_days = st.sidebar.slider(
+    get_text("historical_data_days", current_lang), 
+    min_value=30, max_value=365, 
+    value=st.session_state.get('lookback_days', 365)
+)
+st.session_state.lookback_days = lookback_days
+
+threshold = st.sidebar.slider(
+    get_text("signal_threshold", current_lang), 
+    min_value=0.1, max_value=10.0, 
+    value=st.session_state.get('threshold', 2.0), 
+    step=0.1
+)
+st.session_state.threshold = threshold
+
+# Add a reset button
+st.sidebar.button(get_text("reset_filters", current_lang), on_click=reset_filters, use_container_width=True)
+
+# Extract values for use in the app
+market_type = st.session_state.market_type
+n_future_steps = st.session_state.n_future_steps
 
 # Model instantiation based on market type and horizon
 @st.cache_resource
@@ -123,13 +200,9 @@ if market_type == "spot":
 else:
     predictor = get_futures_predictor(n_future_steps)
 
-# Other parameters
-lookback_days = st.sidebar.slider(get_text("historical_data_days", current_lang), min_value=30, max_value=365, value=365)
-threshold = st.sidebar.slider(get_text("signal_threshold", current_lang), min_value=0.1, max_value=10.0, value=2.0, step=0.1)
-
 # --- Main Content ---
 title_key = "futures_prediction_title" if market_type == "futures" else "price_prediction_title"
-st.title(f"{symbol} {get_text(title_key, current_lang)} {selected_horizon_label}")
+st.title(f"{symbol} {get_text(title_key, current_lang)} {selected_horizon_display}")
 
 def generate_trading_signal(current_price, predicted_sequence, threshold, lang):
     """Generate Long/Short/Hold signal based on the predicted price trajectory."""
@@ -148,7 +221,7 @@ def generate_trading_signal(current_price, predicted_sequence, threshold, lang):
 
 try:
     # 1. Fetch and prepare data based on market type
-    with st.spinner(get_text("fetching_data", current_lang, selected_horizon_label)):
+    with st.spinner(get_text("fetching_data", current_lang, selected_horizon_display)):
         if market_type == "spot":
             df = data_loader.fetch_historical_data(symbol=symbol, lookback_days=lookback_days)
             if df.empty:
@@ -173,7 +246,7 @@ try:
     # 2. Load or train model
     n_features = X_train.shape[2]
     if not predictor.load_model(n_features):
-        with st.spinner(get_text("training_model", current_lang, selected_horizon_label)):
+        with st.spinner(get_text("training_model", current_lang, selected_horizon_display)):
             predictor.train(X_train, y_train)
     
     # 3. Generate and process predictions
@@ -200,13 +273,13 @@ try:
         
         predicted_final = predicted_prices[-1]
         change_final = (predicted_final - current_price) / current_price * 100
-        col2.metric(f"🎯 Exact Forecast ({selected_horizon_label})", 
+        col2.metric(f"🎯 Exact Forecast ({selected_horizon_display})", 
                    f"${predicted_final:,.4f}", 
                    f"{change_final:+.2f}%")
         
         predicted_avg = np.mean(predicted_prices)
         change_avg = (predicted_avg - current_price) / current_price * 100
-        col3.metric(f"📊 Average Price ({selected_horizon_label})", 
+        col3.metric(f"📊 Average Price ({selected_horizon_display})", 
                    f"${predicted_avg:,.4f}", 
                    f"{change_avg:+.2f}%")
         
@@ -230,7 +303,7 @@ try:
                 hide_index=True
             )
         else:
-            st.info(f"🎯 **Exact Forecast for next {selected_horizon_label}:** ${predicted_final:,.4f} ({change_final:+.2f}%)")
+            st.info(f"🎯 **Exact Forecast for next {selected_horizon_display}:** ${predicted_final:,.4f} ({change_final:+.2f}%)")
         
         # Summary statistics
         col1, col2, col3, col4 = st.columns(4)
@@ -273,13 +346,13 @@ try:
         
         predicted_final = predicted_prices[-1]
         change_final = (predicted_final - current_price) / current_price * 100
-        col2.metric(f"🎯 Exact Forecast ({selected_horizon_label})", 
+        col2.metric(f"🎯 Exact Forecast ({selected_horizon_display})", 
                    f"${predicted_final:,.4f}", 
                    f"{change_final:+.2f}%")
         
         predicted_avg = np.mean(predicted_prices)
         change_avg = (predicted_avg - current_price) / current_price * 100
-        col3.metric(f"📊 Average Price ({selected_horizon_label})", 
+        col3.metric(f"📊 Average Price ({selected_horizon_display})", 
                    f"${predicted_avg:,.4f}", 
                    f"{change_avg:+.2f}%")
         
@@ -303,7 +376,7 @@ try:
                 hide_index=True
             )
         else:
-            st.info(f"🎯 **Exact Forecast for next {selected_horizon_label}:** ${predicted_final:,.4f} ({change_final:+.2f}%)")
+            st.info(f"🎯 **Exact Forecast for next {selected_horizon_display}:** ${predicted_final:,.4f} ({change_final:+.2f}%)")
         
         # Summary statistics
         col1, col2, col3, col4 = st.columns(4)
@@ -360,7 +433,7 @@ try:
             fill='tonexty', fillcolor='rgba(128,128,128,0.1)'
         ))
 
-    chart_title = f"{symbol} {get_text('price_forecast_for', current_lang)} {selected_horizon_label}"
+    chart_title = f"{symbol} {get_text('price_forecast_for', current_lang)} {selected_horizon_display}"
     if market_type == "futures":
         chart_title += " (Futures)"
     
