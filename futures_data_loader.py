@@ -6,6 +6,7 @@ from pybit.unified_trading import HTTP
 from ta.trend import SMAIndicator, EMAIndicator
 from ta.momentum import RSIIndicator, StochasticOscillator
 from ta.volatility import BollingerBands
+from ta.volume import OnBalanceVolumeIndicator, ChaikinMoneyFlowIndicator
 from sklearn.preprocessing import MinMaxScaler
 from dotenv import load_dotenv
 import logging
@@ -276,61 +277,86 @@ class FuturesDataLoader:
             # Clean up temporary columns
             df = df.drop(['tr1', 'tr2', 'tr3'], axis=1)
             
-            logging.info("Successfully added futures technical indicators")
+            # Volume Indicators
+            df['obv'] = OnBalanceVolumeIndicator(df['close'], df['volume']).on_balance_volume()
+            df['cmf'] = ChaikinMoneyFlowIndicator(df['high'], df['low'], df['close'], df['volume']).chaikin_money_flow()
+
+            # Merge external data if available
+            df_oi = self.get_open_interest(df.attrs.get('symbol', ''))
+            if not df_oi.empty:
+                df = df.join(df_oi.reindex(df.index, method='ffill'))
+                df['open_interest_change'] = df['openInterest'].pct_change()
+            
+            df_funding = self.get_funding_rate(df.attrs.get('symbol', ''))
+            if not df_funding.empty:
+                df = df.join(df_funding.reindex(df.index, method='ffill'))
+
+            logging.info("Successfully added futures-specific technical indicators")
             return df
         except Exception as e:
             logging.error(f"Error in add_futures_indicators: {str(e)}")
             return df
 
     def prepare_futures_data(self, df, sequence_length=24, n_future_steps=1, train_split=0.8):
-        """Prepare futures data for LSTM model with additional features."""
+        """Prepare futures data for LSTM model."""
         if df.empty:
             logging.warning("Empty dataframe provided to prepare_futures_data")
             return None, None, None, None, None
             
         try:
-            # Select features for training (compatible with existing model - 15 features)
+            # Expanded feature set for futures
             features = [
-                'close', 'volume', 'sma_20', 'sma_50', 'ema_12', 'ema_26',
-                'macd', 'macd_signal', 'rsi', 'bb_width', 'price_change',
-                'volatility', 'volume_ratio', 'hl_spread', 'atr'
+                'close', 'volume', 'sma_20', 'sma_50', 'rsi', 'macd', 
+                'bb_width', 'stoch_k', 'atr', 'obv', 'cmf', 
+                'fundingRate', 'openInterest'
             ]
             
-            # Filter features that exist in the dataframe
+            # Ensure all features exist in the dataframe
             available_features = [f for f in features if f in df.columns]
+            if len(available_features) < len(features):
+                missing_features = set(features) - set(available_features)
+                logging.warning(f"Missing features for futures model: {missing_features}. Using available features.")
+            
             data = df[available_features].copy()
             
-            # Handle missing values
-            data = data.dropna()
+            # Fill missing values (especially for fundingRate and openInterest which might be sparse)
+            data = data.fillna(method='ffill').fillna(method='bfill')
+            
+            # Drop any remaining NaN values if they exist at the start of the series
+            data.dropna(inplace=True)
             
             if len(data) < sequence_length + n_future_steps:
-                logging.error(f"Insufficient futures data: {len(data)} rows, need at least {sequence_length + n_future_steps}")
+                logging.error("Not enough data to create sequences after processing.")
                 return None, None, None, None, None
+                
+            # Keep original 'close' for inverse transform
+            original_y = data['close'].values
             
-            # Scale the features
-            data_scaled = self.scaler.fit_transform(data)
+            # Scale all features
+            scaled_data = self.scaler.fit_transform(data)
+            
+            # Get the index of the 'close' column
+            close_idx = data.columns.get_loc('close')
             
             # Create sequences
             X, y = [], []
-            for i in range(len(data_scaled) - sequence_length - n_future_steps + 1):
-                X.append(data_scaled[i : i + sequence_length])
-                y.append(data_scaled[i + sequence_length : i + sequence_length + n_future_steps, 0])
-                
+            for i in range(len(scaled_data) - sequence_length - n_future_steps + 1):
+                X.append(scaled_data[i:i+sequence_length])
+                y.append(scaled_data[i+sequence_length:i+sequence_length+n_future_steps, close_idx])
+            
             X, y = np.array(X), np.array(y)
             
-            # Split into train and test sets
-            train_size = int(len(X) * train_split)
-            X_train, X_test = X[:train_size], X[train_size:]
-            y_train, y_test = y[:train_size], y[train_size:]
+            if len(X) == 0:
+                logging.error("No sequences were created. Check data length and sequence parameters.")
+                return None, None, None, None, None
+                
+            # Split data
+            split_idx = int(len(X) * train_split)
+            X_train, X_test = X[:split_idx], X[split_idx:]
+            y_train, y_test = y[:split_idx], y[split_idx:]
+            original_y_test = original_y[len(original_y) - len(y_test):]
             
-            # Keep the original unscaled test data for evaluation
-            original_y_test = []
-            for i in range(train_size, len(data) - sequence_length - n_future_steps + 1):
-                original_y_test.append(data['close'].iloc[i + sequence_length : i + sequence_length + n_future_steps].values)
-            original_y_test = np.array(original_y_test)
-
-            logging.info(f"Futures data preparation complete. Train size: {len(X_train)}, Test size: {len(X_test)}")
-            logging.info(f"Features used: {available_features}")
+            logging.info(f"Prepared futures data: X_train shape {X_train.shape}, X_test shape {X_test.shape}")
             return X_train, y_train, X_test, y_test, original_y_test
             
         except Exception as e:

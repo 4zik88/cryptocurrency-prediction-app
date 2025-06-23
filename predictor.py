@@ -15,12 +15,12 @@ class LSTMPredictor:
         self.sequence_length = sequence_length
         self.n_future_steps = n_future_steps
         self.model_path = f'crypto_lstm_model_seq{sequence_length}_future{n_future_steps}.h5'
-        self.model = self._build_model()
+        self.model = None  # Initialize model as None
         
-    def _build_model(self):
-        """Build LSTM model architecture for multi-step forecasting."""
+    def _build_model(self, n_features):
+        """Build LSTM model architecture dynamically based on number of features."""
         model = Sequential([
-            LSTM(units=100, return_sequences=True, input_shape=(self.sequence_length, 6)),
+            LSTM(units=100, return_sequences=True, input_shape=(self.sequence_length, n_features)),
             Dropout(0.2),
             LSTM(units=50, return_sequences=False),
             Dropout(0.2),
@@ -29,14 +29,19 @@ class LSTMPredictor:
         ])
         
         # Use standard Adam optimizer (Keras 3 compatible)
-        optimizer = tf.keras.optimizers.Adam(learning_rate=0.001)
+        optimizer = Adam(learning_rate=0.001)
         
         model.compile(optimizer=optimizer, loss='mean_squared_error')
-        logging.info(f"Successfully built LSTM model for {self.n_future_steps} future steps.")
+        logging.info(f"Successfully built LSTM model for {self.n_future_steps} future steps with {n_features} features.")
         return model
     
     def train(self, X_train, y_train, epochs=20, batch_size=32, validation_split=0.1):
         """Train the LSTM model."""
+        # Build model dynamically if it hasn't been built yet
+        if self.model is None:
+            n_features = X_train.shape[2]
+            self.model = self._build_model(n_features)
+
         logging.info(f"Starting model training for {self.n_future_steps}-step forecast...")
         history = self.model.fit(
             X_train,
@@ -60,21 +65,39 @@ class LSTMPredictor:
     
     def save_model(self):
         """Save the model to a file."""
+        if self.model is None:
+            logging.warning("Attempted to save a model that is None. Save operation aborted.")
+            return
         try:
             self.model.save(self.model_path)
             logging.info(f"Model saved to {self.model_path}")
         except Exception as e:
             logging.error(f"Error saving model: {str(e)}")
     
-    def load_model(self):
-        """Load a saved model."""
+    def load_model(self, n_features):
+        """Load a saved model only if its input shape is compatible."""
         if os.path.exists(self.model_path):
             try:
-                self.model = tf.keras.models.load_model(self.model_path)
-                logging.info(f"Model loaded from {self.model_path}")
-                return True
+                loaded_model = tf.keras.models.load_model(self.model_path)
+                
+                # Check for input shape compatibility
+                expected_shape = (None, self.sequence_length, n_features)
+                model_input_shape = loaded_model.layers[0].input_shape
+                
+                if model_input_shape == expected_shape:
+                    self.model = loaded_model
+                    logging.info(f"Compatible model loaded from {self.model_path}")
+                    return True
+                else:
+                    logging.warning(
+                        f"Model found at {self.model_path} is incompatible. "
+                        f"Expected shape {expected_shape}, but found {model_input_shape}. "
+                        "A new model will be trained."
+                    )
+                    return False
+                    
             except Exception as e:
-                logging.error(f"Error loading model: {str(e)}")
+                logging.error(f"Error loading or checking model, will retrain: {str(e)}")
                 return False
         return False
 

@@ -171,7 +171,8 @@ try:
             st.stop()
 
     # 2. Load or train model
-    if not predictor.load_model():
+    n_features = X_train.shape[2]
+    if not predictor.load_model(n_features):
         with st.spinner(get_text("training_model", current_lang, selected_horizon_label)):
             predictor.train(X_train, y_train)
     

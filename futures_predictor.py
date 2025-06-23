@@ -172,31 +172,44 @@ class FuturesLSTMPredictor:
 
     def save_model(self):
         """Save the trained futures model."""
+        if self.model is None:
+            logging.warning("Attempted to save a futures model that is None. Save operation aborted.")
+            return
         try:
-            if self.model is not None:
-                self.model.save(self.model_path)
-                logging.info(f"Futures model saved to {self.model_path}")
-                return True
-            else:
-                logging.warning("No model to save")
-                return False
+            self.model.save(self.model_path)
+            logging.info(f"Futures model saved to {self.model_path}")
+            return True
         except Exception as e:
             logging.error(f"Error saving futures model: {str(e)}")
             return False
 
-    def load_model(self):
-        """Load a pre-trained futures model."""
-        try:
-            if os.path.exists(self.model_path):
-                self.model = load_model(self.model_path)
-                logging.info(f"Futures model loaded from {self.model_path}")
-                return True
-            else:
-                logging.info(f"No saved futures model found at {self.model_path}")
+    def load_model(self, n_features):
+        """Load a pre-trained futures model only if it's compatible."""
+        if os.path.exists(self.model_path):
+            try:
+                loaded_model = load_model(self.model_path)
+                
+                # Check for input shape compatibility
+                expected_shape = (None, self.sequence_length, n_features)
+                model_input_shape = loaded_model.layers[0].input_shape
+
+                if model_input_shape == expected_shape:
+                    self.model = loaded_model
+                    logging.info(f"Compatible futures model loaded from {self.model_path}")
+                    return True
+                else:
+                    logging.warning(
+                        f"Futures model at {self.model_path} is incompatible. "
+                        f"Expected {n_features} features, found {model_input_shape[2]}. "
+                        "A new model will be trained."
+                    )
+                    return False
+            except Exception as e:
+                logging.error(f"Error loading futures model, will retrain: {str(e)}")
                 return False
-        except Exception as e:
-            logging.error(f"Error loading futures model: {str(e)}")
-            return False
+        
+        logging.info(f"No saved futures model found at {self.model_path}")
+        return False
 
     def evaluate_model(self, X_test, y_test):
         """Evaluate the futures model performance."""

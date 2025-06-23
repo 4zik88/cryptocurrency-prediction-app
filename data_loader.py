@@ -6,7 +6,7 @@ from pybit.unified_trading import HTTP
 from ta.trend import SMAIndicator, MACD, EMAIndicator
 from ta.momentum import RSIIndicator, StochasticOscillator, WilliamsRIndicator
 from ta.volatility import BollingerBands, AverageTrueRange
-from ta.volume import OnBalanceVolumeIndicator, VolumePriceTrendIndicator
+from ta.volume import OnBalanceVolumeIndicator, VolumePriceTrendIndicator, ChaikinMoneyFlowIndicator
 from sklearn.preprocessing import MinMaxScaler
 from dotenv import load_dotenv
 import logging
@@ -193,8 +193,8 @@ class DataLoader:
             
             # Volume Indicators
             df['obv'] = OnBalanceVolumeIndicator(df['close'], df['volume']).on_balance_volume()
+            df['cmf'] = ChaikinMoneyFlowIndicator(df['high'], df['low'], df['close'], df['volume']).chaikin_money_flow()
             df['volume_price_trend'] = VolumePriceTrendIndicator(df['close'], df['volume']).volume_price_trend()
-            df['volume_sma'] = df['volume'].rolling(window=20).mean()  # Manual volume SMA
             
             # Price Action Features
             df['price_change'] = df['close'].pct_change()
@@ -236,8 +236,11 @@ class DataLoader:
             return None, None, None, None, None
             
         try:
-            # Select only the original 6 features to match the model's expectations
-            features = ['close', 'volume', 'sma_20', 'sma_50', 'rsi', 'price_change']
+            # Select features for the model. More features can capture more complex patterns.
+            features = [
+                'close', 'volume', 'sma_20', 'sma_50', 'rsi', 'macd', 
+                'bb_width', 'stoch_k', 'williams_r', 'atr', 'obv', 'cmf'
+            ]
             
             # Ensure all features exist in the dataframe
             available_features = [f for f in features if f in df.columns]
