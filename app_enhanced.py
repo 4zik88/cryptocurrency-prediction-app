@@ -8,6 +8,7 @@ from futures_data_loader import FuturesDataLoader
 from predictor import LSTMPredictor
 from futures_predictor import FuturesLSTMPredictor
 from cryptocompare_data_loader import CryptoCompareDataLoader
+from trading_pattern_analyzer import TradingPatternAnalyzer
 import os
 from translations import get_text, init_language, get_current_language, set_language
 import numpy as np
@@ -59,6 +60,15 @@ def get_cryptocompare_data_loader():
         return CryptoCompareDataLoader(api_key=api_key)
     except Exception as e:
         st.warning(f"CryptoCompare data loader failed to initialize: {str(e)}")
+        return None
+
+@st.cache_resource
+def get_trading_pattern_analyzer():
+    """Get cached trading pattern analyzer"""
+    try:
+        return TradingPatternAnalyzer()
+    except Exception as e:
+        st.warning(f"Trading pattern analyzer failed to initialize: {str(e)}")
         return None
 
 # --- State Management ---
@@ -249,6 +259,16 @@ try:
                 st.stop()
             
             df = data_loader.add_technical_indicators(df)
+            
+            # Enhance data with trading pattern features for better predictions
+            pattern_analyzer = get_trading_pattern_analyzer()
+            if pattern_analyzer:
+                try:
+                    df = pattern_analyzer.enhance_prediction_features(df.copy())
+                    logging.info("Enhanced prediction features added to spot dataset")
+                except Exception as e:
+                    logging.warning(f"Could not enhance spot prediction features: {str(e)}")
+            
             X_train, y_train, X_test, y_test, original_y_test = data_loader.prepare_data(df, n_future_steps=n_future_steps)
         else:
             df = data_loader.fetch_futures_data(symbol=symbol, lookback_days=lookback_days)
@@ -257,6 +277,16 @@ try:
                 st.stop()
             
             df = data_loader.add_futures_indicators(df)
+            
+            # Enhance data with trading pattern features for better predictions
+            pattern_analyzer = get_trading_pattern_analyzer()
+            if pattern_analyzer:
+                try:
+                    df = pattern_analyzer.enhance_prediction_features(df.copy())
+                    logging.info("Enhanced prediction features added to futures dataset")
+                except Exception as e:
+                    logging.warning(f"Could not enhance futures prediction features: {str(e)}")
+            
             X_train, y_train, X_test, y_test, original_y_test = data_loader.prepare_futures_data(df, n_future_steps=n_future_steps)
 
         if X_train is None:
@@ -434,6 +464,170 @@ try:
     else:
         st.info(get_text("hold_neutral", current_lang))
     st.caption(signal_reason)
+    
+    # --- Enhanced Trading Pattern Analysis ---
+    st.header("🔬 Advanced Trading Pattern Analysis")
+    
+    # Initialize trading pattern analyzer
+    pattern_analyzer = get_trading_pattern_analyzer()
+    
+    if pattern_analyzer:
+        with st.spinner("Analyzing trading patterns..."):
+            try:
+                # Detect price jumps
+                jump_analysis = pattern_analyzer.detect_price_jumps(df, 
+                                                                  jump_threshold=threshold, 
+                                                                  min_volume_ratio=1.5)
+                
+                # Identify support/resistance levels
+                sr_analysis = pattern_analyzer.identify_support_resistance_levels(df)
+                
+                # Analyze intraday patterns
+                intraday_analysis = pattern_analyzer.analyze_intraday_patterns(df)
+                
+                # Calculate market microstructure features
+                microstructure_features = pattern_analyzer.calculate_market_microstructure_features(df)
+                
+                # Generate trading insights
+                trading_insights = pattern_analyzer.generate_trading_insights(
+                    df, jump_analysis, sr_analysis, intraday_analysis, microstructure_features
+                )
+                
+                # Display jump analysis
+                if jump_analysis:
+                    st.subheader("📊 Price Jump Analysis")
+                    col1, col2, col3, col4 = st.columns(4)
+                    
+                    col1.metric("⬆️ Upward Jumps", jump_analysis.get('jump_up_count', 0))
+                    col2.metric("⬇️ Downward Jumps", jump_analysis.get('jump_down_count', 0))
+                    col3.metric("📈 Avg Jump Size (Up)", f"{jump_analysis.get('avg_jump_up_size', 0):.2f}%")
+                    col4.metric("📉 Avg Jump Size (Down)", f"{jump_analysis.get('avg_jump_down_size', 0):.2f}%")
+                    
+                    if jump_analysis.get('post_jump_analysis'):
+                        with st.expander("🔍 Post-Jump Behavior Analysis"):
+                            for period, data in jump_analysis['post_jump_analysis'].items():
+                                st.write(f"**{period.replace('_', ' ').title()}:**")
+                                pcol1, pcol2, pcol3, pcol4 = st.columns(4)
+                                pcol1.metric("Avg Return After Up Jump", f"{data['avg_return_after_jump_up']:.2f}%")
+                                pcol2.metric("Avg Return After Down Jump", f"{data['avg_return_after_jump_down']:.2f}%")
+                                pcol3.metric("Up Jump Reversal Rate", f"{data['reversal_probability_up']*100:.1f}%")
+                                pcol4.metric("Down Jump Reversal Rate", f"{data['reversal_probability_down']*100:.1f}%")
+                
+                # Display support/resistance analysis
+                if sr_analysis and sr_analysis.get('levels'):
+                    st.subheader("🎯 Support & Resistance Levels")
+                    
+                    # Show nearest levels
+                    col1, col2 = st.columns(2)
+                    
+                    if sr_analysis.get('nearest_support'):
+                        support = sr_analysis['nearest_support']
+                        col1.metric("🟢 Nearest Support", 
+                                   f"${support['price']:,.2f}", 
+                                   f"-{support['distance_pct']:.2f}% ({support['strength']} touches)")
+                    
+                    if sr_analysis.get('nearest_resistance'):
+                        resistance = sr_analysis['nearest_resistance']
+                        col2.metric("🔴 Nearest Resistance", 
+                                   f"${resistance['price']:,.2f}", 
+                                   f"+{resistance['distance_pct']:.2f}% ({resistance['strength']} touches)")
+                    
+                    # Show all significant levels
+                    with st.expander("📋 All Significant Levels"):
+                        levels_df = pd.DataFrame(sr_analysis['levels'])
+                        if not levels_df.empty:
+                            levels_df['price'] = levels_df['price'].apply(lambda x: f"${x:,.2f}")
+                            levels_df['distance_pct'] = levels_df['distance_pct'].apply(lambda x: f"{x:.2f}%")
+                            st.dataframe(levels_df, use_container_width=True)
+                
+                # Display intraday patterns
+                if intraday_analysis:
+                    st.subheader("⏰ Intraday Trading Patterns")
+                    col1, col2, col3, col4 = st.columns(4)
+                    
+                    col1.metric("📈 Peak Volume Hour", f"{intraday_analysis.get('peak_volume_hour', 'N/A')}:00 UTC")
+                    col2.metric("⚡ Peak Volatility Hour", f"{intraday_analysis.get('peak_volatility_hour', 'N/A')}:00 UTC")
+                    col3.metric("🟢 Most Bullish Hour", f"{intraday_analysis.get('most_bullish_hour', 'N/A')}:00 UTC")
+                    col4.metric("🔴 Most Bearish Hour", f"{intraday_analysis.get('most_bearish_hour', 'N/A')}:00 UTC")
+                    
+                    # Session analysis
+                    if intraday_analysis.get('session_analysis'):
+                        with st.expander("🌍 Trading Session Analysis"):
+                            for session, data in intraday_analysis['session_analysis'].items():
+                                st.write(f"**{session.title()} Session ({session.upper()} Hours):**")
+                                scol1, scol2, scol3, scol4 = st.columns(4)
+                                scol1.metric("Avg Volume", f"{data['avg_volume']:,.0f}")
+                                scol2.metric("Avg Volatility", f"{data['avg_volatility']:.2f}%")
+                                scol3.metric("Avg Price Change", f"{data['avg_price_change']:.2f}%")
+                                bias_color = "🟢" if data['directional_bias'] == 'bullish' else "🔴"
+                                scol4.metric("Directional Bias", f"{bias_color} {data['directional_bias'].title()}")
+                
+                # Display market microstructure
+                if microstructure_features:
+                    st.subheader("🧬 Market Microstructure")
+                    col1, col2, col3, col4 = st.columns(4)
+                    
+                    buying_pressure = microstructure_features.get('avg_buying_pressure', 0.5)
+                    selling_pressure = microstructure_features.get('avg_selling_pressure', 0.5)
+                    net_pressure = microstructure_features.get('net_pressure_trend', 0)
+                    momentum = microstructure_features.get('momentum_strength', 0)
+                    
+                    col1.metric("🟢 Buying Pressure", f"{buying_pressure:.3f}")
+                    col2.metric("🔴 Selling Pressure", f"{selling_pressure:.3f}")
+                    col3.metric("⚖️ Net Pressure", f"{net_pressure:+.3f}")
+                    col4.metric("🚀 Momentum Strength", f"{momentum:+.3f}")
+                    
+                    # Market regime
+                    regime = microstructure_features.get('market_regime', {})
+                    vol_regime = regime.get('volatility_regime', 'unknown')
+                    volume_regime = regime.get('volume_regime', 'unknown')
+                    
+                    col1, col2 = st.columns(2)
+                    vol_color = "🟡" if vol_regime == 'high' else "🟢"
+                    vol_color_regime = "🟡" if volume_regime == 'high' else "🟢"
+                    col1.metric("📊 Volatility Regime", f"{vol_color} {vol_regime.title()}")
+                    col2.metric("📈 Volume Regime", f"{vol_color_regime} {volume_regime.title()}")
+                
+                # Display trading insights
+                if trading_insights:
+                    st.subheader("💡 Trading Insights & Recommendations")
+                    
+                    # Trading opportunities
+                    if trading_insights.get('trading_opportunities'):
+                        st.write("**🎯 Trading Opportunities:**")
+                        for opp in trading_insights['trading_opportunities']:
+                            confidence_color = {"high": "🟢", "medium": "🟡", "low": "🔴"}.get(opp.get('confidence', 'low'), "🔴")
+                            st.success(f"{confidence_color} **{opp['type'].replace('_', ' ').title()}**: {opp['signal']}")
+                    
+                    # Risk factors
+                    if trading_insights.get('risk_factors'):
+                        st.write("**⚠️ Risk Factors:**")
+                        for risk in trading_insights['risk_factors']:
+                            st.warning(f"• {risk}")
+                    
+                    # Pattern signals
+                    if trading_insights.get('pattern_signals'):
+                        st.write("**📡 Pattern Signals:**")
+                        for signal in trading_insights['pattern_signals']:
+                            if signal.get('actionable'):
+                                st.info(f"💡 **{signal['type'].replace('_', ' ').title()}**: {signal['signal']}")
+                            else:
+                                st.write(f"• {signal['signal']}")
+                
+                # Create enhanced trading chart
+                st.subheader("📊 Enhanced Trading Chart")
+                enhanced_chart = pattern_analyzer.create_enhanced_trading_chart(
+                    df, jump_analysis, sr_analysis, symbol
+                )
+                st.plotly_chart(enhanced_chart, use_container_width=True)
+                
+                # Enhance prediction features for better accuracy
+                enhanced_df = pattern_analyzer.enhance_prediction_features(df.copy())
+                st.success("✅ Trading pattern analysis completed! Enhanced features have been integrated for more accurate predictions.")
+                
+            except Exception as e:
+                st.error(f"Error in trading pattern analysis: {str(e)}")
+                logging.error(f"Trading pattern analysis error: {str(e)}")
     
     # --- CryptoCompare Enhanced Analysis (for ALL cryptocurrencies) ---
     if cryptocompare_enhancement:
