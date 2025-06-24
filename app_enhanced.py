@@ -7,6 +7,8 @@ from data_loader import DataLoader
 from futures_data_loader import FuturesDataLoader
 from predictor import LSTMPredictor
 from futures_predictor import FuturesLSTMPredictor
+from cryptocompare_data_loader import CryptoCompareDataLoader
+import os
 from translations import get_text, init_language, get_current_language, set_language
 import numpy as np
 
@@ -40,6 +42,24 @@ def get_futures_data_loader():
     except Exception as e:
         st.error(f"{get_text('failed_initialize_dataloader', current_lang)} {str(e)}")
         st.stop()
+
+@st.cache_resource
+def get_cryptocompare_data_loader():
+    """Get cached CryptoCompare data loader for all cryptocurrencies"""
+    try:
+        # Get API key from environment
+        api_key = os.getenv('CRYPTOCOMPARE_API_KEY')
+        if not api_key:
+            # Try Streamlit secrets
+            try:
+                api_key = st.secrets.get('CRYPTOCOMPARE_API_KEY', '')
+            except:
+                pass
+        
+        return CryptoCompareDataLoader(api_key=api_key)
+    except Exception as e:
+        st.warning(f"CryptoCompare data loader failed to initialize: {str(e)}")
+        return None
 
 # --- State Management ---
 def initialize_state():
@@ -257,6 +277,16 @@ try:
     
     current_price = df['close'].iloc[-1]
     
+    # 4. Enhance predictions with CryptoCompare data (for ALL cryptocurrencies)
+    cryptocompare_loader = get_cryptocompare_data_loader()
+    cryptocompare_enhancement = {}
+    if cryptocompare_loader:
+        with st.spinner("Enhancing predictions with CryptoCompare market intelligence..."):
+            current_market_data = {'current_price': current_price}
+            cryptocompare_enhancement = cryptocompare_loader.enhance_prediction_with_cryptocompare_data(
+                symbol, predicted_prices, current_market_data
+            )
+    
     # --- Display Metrics and Signals ---
     signal, signal_reason = generate_trading_signal(current_price, predicted_prices, threshold, current_lang)
     
@@ -404,6 +434,151 @@ try:
     else:
         st.info(get_text("hold_neutral", current_lang))
     st.caption(signal_reason)
+    
+    # --- CryptoCompare Enhanced Analysis (for ALL cryptocurrencies) ---
+    if cryptocompare_enhancement:
+        base_symbol = cryptocompare_loader._extract_base_symbol(symbol)
+        st.header(f"🌐 CryptoCompare Market Intelligence - {base_symbol}")
+        
+        # Current price comparison
+        if cryptocompare_enhancement.get('cryptocompare_data'):
+            cc_data = cryptocompare_enhancement['cryptocompare_data']
+            col1, col2, col3 = st.columns(3)
+            
+            cc_price = cc_data['price']
+            col1.metric("🌐 CryptoCompare Price", f"${cc_price:,.4f}")
+            
+            if cryptocompare_enhancement.get('price_comparison'):
+                comparison = cryptocompare_enhancement['price_comparison']
+                exchange_price = comparison['exchange_price']
+                deviation = comparison['deviation_pct']
+                
+                col2.metric("📊 Exchange Price", f"${exchange_price:,.4f}")
+                col3.metric("📏 Price Deviation", f"{deviation:.2f}%", 
+                           delta=f"±{deviation:.2f}%" if deviation > 0.5 else "Aligned")
+        
+        # Market metrics
+        if cryptocompare_enhancement.get('market_metrics'):
+            metrics = cryptocompare_enhancement['market_metrics']
+            
+            st.subheader("📊 Real-Time Market Metrics")
+            col1, col2, col3, col4 = st.columns(4)
+            
+            if 'change_pct_24h' in metrics:
+                change_24h = metrics['change_pct_24h']
+                change_color = "🟢" if change_24h >= 0 else "🔴"
+                col1.metric(f"{change_color} 24h Change", f"{change_24h:+.2f}%")
+            
+            if 'volume_24h' in metrics and metrics['volume_24h'] > 0:
+                volume_m = metrics['volume_24h'] / 1_000_000
+                col2.metric("📈 24h Volume", f"${volume_m:.1f}M")
+            
+            if 'market_cap' in metrics and metrics['market_cap'] > 0:
+                market_cap_b = metrics['market_cap'] / 1_000_000_000
+                col3.metric("💎 Market Cap", f"${market_cap_b:.1f}B")
+            
+            if 'high_24h' in metrics and 'low_24h' in metrics:
+                high_24h = metrics['high_24h']
+                low_24h = metrics['low_24h']
+                range_pct = ((high_24h - low_24h) / low_24h) * 100 if low_24h > 0 else 0
+                col4.metric("📏 24h Range", f"{range_pct:.2f}%")
+        
+        # Advanced sentiment analysis
+        if cryptocompare_enhancement.get('sentiment_analysis'):
+            sentiment = cryptocompare_enhancement['sentiment_analysis']
+            
+            st.subheader("🧠 Advanced Sentiment Analysis")
+            
+            # Overall sentiment score
+            overall_score = sentiment.get('overall_score', 50)
+            confidence = sentiment.get('confidence', 'medium')
+            
+            col1, col2, col3 = st.columns(3)
+            
+            # Sentiment gauge
+            if overall_score >= 80:
+                sentiment_emoji = "🚀"
+                sentiment_text = "Very Bullish"
+                sentiment_color = "success"
+            elif overall_score >= 65:
+                sentiment_emoji = "📈"
+                sentiment_text = "Bullish"
+                sentiment_color = "success"
+            elif overall_score >= 35:
+                sentiment_emoji = "📊"
+                sentiment_text = "Neutral"
+                sentiment_color = "info"
+            elif overall_score >= 20:
+                sentiment_emoji = "📉"
+                sentiment_text = "Bearish"
+                sentiment_color = "warning"
+            else:
+                sentiment_emoji = "⛔"
+                sentiment_text = "Very Bearish"
+                sentiment_color = "error"
+            
+            col1.metric(f"{sentiment_emoji} Sentiment Score", f"{overall_score:.1f}/100")
+            col2.metric("📊 Analysis", sentiment_text)
+            col3.metric("🎯 Confidence", confidence.title())
+            
+            # Sentiment factors breakdown
+            if 'factors' in sentiment:
+                factors = sentiment['factors']
+                if factors:
+                    with st.expander("📊 Sentiment Factors Breakdown"):
+                        fcol1, fcol2, fcol3, fcol4 = st.columns(4)
+                        
+                        if 'price_momentum' in factors:
+                            momentum_score = factors['price_momentum']
+                            momentum_color = "🟢" if momentum_score >= 60 else "🟡" if momentum_score >= 40 else "🔴"
+                            fcol1.metric(f"{momentum_color} Price Momentum", f"{momentum_score:.1f}/100")
+                        
+                        if 'volume_strength' in factors:
+                            volume_score = factors['volume_strength']
+                            volume_color = "🟢" if volume_score >= 60 else "🟡" if volume_score >= 40 else "🔴"
+                            fcol2.metric(f"{volume_color} Volume Strength", f"{volume_score:.1f}/100")
+                        
+                        if 'social_activity' in factors:
+                            social_score = factors['social_activity']
+                            social_color = "🟢" if social_score >= 60 else "🟡" if social_score >= 40 else "🔴"
+                            fcol3.metric(f"{social_color} Social Activity", f"{social_score:.1f}/100")
+                        
+                        if 'news_sentiment' in factors:
+                            news_score = factors['news_sentiment']
+                            news_color = "🟢" if news_score >= 60 else "🟡" if news_score >= 40 else "🔴"
+                            fcol4.metric(f"{news_color} News Sentiment", f"{news_score:.1f}/100")
+            
+            # Sentiment signals
+            if 'signals' in sentiment and sentiment['signals']:
+                st.subheader("📡 Market Signals")
+                for signal in sentiment['signals']:
+                    if "Very Bullish" in signal or "Bullish" in signal:
+                        st.success(signal)
+                    elif "Very Bearish" in signal or "Bearish" in signal:
+                        st.error(signal)
+                    elif "Neutral" in signal:
+                        st.info(signal)
+                    else:
+                        st.warning(signal)
+        
+        # Prediction confidence and risk assessment
+        confidence = cryptocompare_enhancement.get('prediction_confidence', 'medium')
+        confidence_color = {"high": "🟢", "medium": "🟡", "low": "🔴"}.get(confidence, "🟡")
+        st.info(f"{confidence_color} **Prediction Confidence**: {confidence.title()}")
+        
+        # Risk factors
+        if cryptocompare_enhancement.get('risk_factors'):
+            st.subheader("⚠️ Risk Factors")
+            for risk in cryptocompare_enhancement['risk_factors']:
+                st.warning(f"• {risk}")
+        
+        # Opportunities
+        if cryptocompare_enhancement.get('opportunities'):
+            st.subheader("✅ Market Opportunities")
+            for opportunity in cryptocompare_enhancement['opportunities']:
+                st.success(f"• {opportunity}")
+        
+        st.caption(f"💡 CryptoCompare data enhances {base_symbol} predictions with comprehensive market intelligence, sentiment analysis, and social indicators.")
 
     # --- Plotting ---
     st.header(get_text("price_forecast_chart", current_lang))
