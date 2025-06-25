@@ -11,7 +11,7 @@ Enhanced cryptocurrency prediction application with SPOT and FUTURES market supp
 - 🌐 **CryptoCompare Integration** - Enhanced predictions for ALL cryptocurrencies with comprehensive market data
 - 🧠 **Advanced Sentiment Analysis** - Multi-factor sentiment scoring for every cryptocurrency
 - 🔍 **Multi-Source Validation** - Price comparison and cross-validation across data sources
-- 🌍 **Multi-language** - Ukrainian and English support
+- 🌍 **Multi-language** - Russian and English support
 - 🌐 **Public Access** - ngrok tunnel for sharing
 
 ## 🏃‍♂️ Quick Start

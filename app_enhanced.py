@@ -59,7 +59,7 @@ def get_cryptocompare_data_loader():
         
         return CryptoCompareDataLoader(api_key=api_key)
     except Exception as e:
-        st.warning(f"CryptoCompare data loader failed to initialize: {str(e)}")
+        st.warning(f"{get_text('cryptocompare_data_loader_failed', get_current_language())} {str(e)}")
         return None
 
 @st.cache_resource
@@ -68,7 +68,7 @@ def get_trading_pattern_analyzer():
     try:
         return TradingPatternAnalyzer()
     except Exception as e:
-        st.warning(f"Trading pattern analyzer failed to initialize: {str(e)}")
+        st.warning(f"{get_text('trading_pattern_analyzer_failed', get_current_language())} {str(e)}")
         return None
 
 # --- State Management ---
@@ -99,7 +99,7 @@ initialize_state()
 st.sidebar.title(get_text("configuration", current_lang))
 
 # Language switcher
-languages = {"English": "en", "Українська": "uk"}
+languages = {"English": "en", "Русский": "ru"}
 selected_language_label = st.sidebar.selectbox(
     get_text("language", current_lang),
     list(languages.keys()),
@@ -137,7 +137,7 @@ data_loader = get_spot_data_loader() if st.session_state.market_type == "spot" e
 # Dynamic Symbol selection based on market type
 cache_key = f'available_pairs_{st.session_state.market_type}'
 if cache_key not in st.session_state:
-    with st.spinner("Fetching available pairs..."):
+    with st.spinner(get_text("fetching_available_pairs", current_lang)):
         if st.session_state.market_type == "spot":
             st.session_state[cache_key] = data_loader.get_available_pairs()
         else:
@@ -311,7 +311,7 @@ try:
     cryptocompare_loader = get_cryptocompare_data_loader()
     cryptocompare_enhancement = {}
     if cryptocompare_loader:
-        with st.spinner("Enhancing predictions with CryptoCompare market intelligence..."):
+        with st.spinner(get_text("enhancing_predictions", current_lang)):
             current_market_data = {'current_price': current_price}
             cryptocompare_enhancement = cryptocompare_loader.enhance_prediction_with_cryptocompare_data(
                 symbol, predicted_prices, current_market_data
@@ -329,30 +329,30 @@ try:
         
         # Main forecast metrics
         col1, col2, col3 = st.columns(3)
-        col1.metric("💰 Current Price", f"${current_price:,.4f}")
+        col1.metric(f"💰 {get_text('current_price', current_lang)}", f"${current_price:,.4f}")
         
         predicted_final = predicted_prices[-1]
         change_final = (predicted_final - current_price) / current_price * 100
-        col2.metric(f"🎯 Exact Forecast ({selected_horizon_display})", 
+        col2.metric(f"🎯 {get_text('exact_forecast', current_lang)} ({selected_horizon_display})", 
                    f"${predicted_final:,.4f}", 
                    f"{change_final:+.2f}%")
         
         predicted_avg = np.mean(predicted_prices)
         change_avg = (predicted_avg - current_price) / current_price * 100
-        col3.metric(f"📊 Average Price ({selected_horizon_display})", 
+        col3.metric(f"📊 {get_text('average_price', current_lang)} ({selected_horizon_display})", 
                    f"${predicted_avg:,.4f}", 
                    f"{change_avg:+.2f}%")
         
         # Detailed step-by-step forecast
-        st.subheader("📈 Step-by-Step Forecast")
+        st.subheader(f"📈 {get_text('step_by_step_forecast', current_lang)}")
         
         if n_future_steps > 1:
             forecast_df = pd.DataFrame({
-                'Hour': [f"Hour {i+1}" for i in range(n_future_steps)],
-                'Predicted Price': [f"${price:,.4f}" for price in predicted_prices],
-                'Change from Current': [f"{((price - current_price) / current_price * 100):+.2f}%" for price in predicted_prices],
-                'Price Movement': [
-                    "📈 UP" if price > current_price else "📉 DOWN" if price < current_price else "➡️ FLAT"
+                get_text('hour', current_lang): [f"{get_text('hour', current_lang)} {i+1}" for i in range(n_future_steps)],
+                get_text('predicted_price', current_lang): [f"${price:,.4f}" for price in predicted_prices],
+                get_text('change_from_current', current_lang): [f"{((price - current_price) / current_price * 100):+.2f}%" for price in predicted_prices],
+                get_text('price_movement', current_lang): [
+                    f"📈 {get_text('up', current_lang)}" if price > current_price else f"📉 {get_text('down', current_lang)}" if price < current_price else f"➡️ {get_text('flat', current_lang)}"
                     for price in predicted_prices
                 ]
             })
@@ -363,29 +363,29 @@ try:
                 hide_index=True
             )
         else:
-            st.info(f"🎯 **Exact Forecast for next {selected_horizon_display}:** ${predicted_final:,.4f} ({change_final:+.2f}%)")
+            st.info(f"🎯 **{get_text('exact_forecast_for_next', current_lang)} {selected_horizon_display}:** ${predicted_final:,.4f} ({change_final:+.2f}%)")
         
         # Summary statistics
         col1, col2, col3, col4 = st.columns(4)
         predicted_low = np.min(predicted_prices)
         change_low = (predicted_low - current_price) / current_price * 100
-        col1.metric("📉 Minimum Expected", f"${predicted_low:,.4f}", f"{change_low:+.2f}%")
+        col1.metric(f"📉 {get_text('minimum_expected', current_lang)}", f"${predicted_low:,.4f}", f"{change_low:+.2f}%")
         
         predicted_high = np.max(predicted_prices)
         change_high = (predicted_high - current_price) / current_price * 100
-        col2.metric("📈 Maximum Expected", f"${predicted_high:,.4f}", f"{change_high:+.2f}%")
+        col2.metric(f"📈 {get_text('maximum_expected', current_lang)}", f"${predicted_high:,.4f}", f"{change_high:+.2f}%")
         
         price_range = predicted_high - predicted_low
         range_pct = (price_range / current_price) * 100
-        col3.metric("📏 Price Range", f"${price_range:,.4f}", f"{range_pct:.2f}%")
+        col3.metric(f"📏 {get_text('price_range', current_lang)}", f"${price_range:,.4f}", f"{range_pct:.2f}%")
         
         volatility = np.std(predicted_prices)
         vol_pct = (volatility / current_price) * 100
-        col4.metric("⚡ Volatility", f"${volatility:,.4f}", f"{vol_pct:.2f}%")
+        col4.metric(f"⚡ {get_text('volatility', current_lang)}", f"${volatility:,.4f}", f"{vol_pct:.2f}%")
         
         # Additional futures metrics
         if 'risk_reward_ratio' in futures_metrics:
-            st.subheader("🎯 Futures-Specific Metrics")
+            st.subheader(f"🎯 {get_text('futures_specific_metrics', current_lang)}")
             col5, col6, col7, col8 = st.columns(4)
             col5.metric(get_text("risk_reward_ratio", current_lang), f"{futures_metrics['risk_reward_ratio']:.2f}")
             
@@ -402,30 +402,30 @@ try:
         
         # Main forecast metrics for spot
         col1, col2, col3 = st.columns(3)
-        col1.metric("💰 Current Price", f"${current_price:,.4f}")
+        col1.metric(f"💰 {get_text('current_price', current_lang)}", f"${current_price:,.4f}")
         
         predicted_final = predicted_prices[-1]
         change_final = (predicted_final - current_price) / current_price * 100
-        col2.metric(f"🎯 Exact Forecast ({selected_horizon_display})", 
+        col2.metric(f"🎯 {get_text('exact_forecast', current_lang)} ({selected_horizon_display})", 
                    f"${predicted_final:,.4f}", 
                    f"{change_final:+.2f}%")
         
         predicted_avg = np.mean(predicted_prices)
         change_avg = (predicted_avg - current_price) / current_price * 100
-        col3.metric(f"📊 Average Price ({selected_horizon_display})", 
+        col3.metric(f"📊 {get_text('average_price', current_lang)} ({selected_horizon_display})", 
                    f"${predicted_avg:,.4f}", 
                    f"{change_avg:+.2f}%")
         
         # Detailed step-by-step forecast
-        st.subheader("📈 Step-by-Step Forecast")
+        st.subheader(f"📈 {get_text('step_by_step_forecast', current_lang)}")
         
         if n_future_steps > 1:
             forecast_df = pd.DataFrame({
-                'Hour': [f"Hour {i+1}" for i in range(n_future_steps)],
-                'Predicted Price': [f"${price:,.4f}" for price in predicted_prices],
-                'Change from Current': [f"{((price - current_price) / current_price * 100):+.2f}%" for price in predicted_prices],
-                'Price Movement': [
-                    "📈 UP" if price > current_price else "📉 DOWN" if price < current_price else "➡️ FLAT"
+                get_text('hour', current_lang): [f"{get_text('hour', current_lang)} {i+1}" for i in range(n_future_steps)],
+                get_text('predicted_price', current_lang): [f"${price:,.4f}" for price in predicted_prices],
+                get_text('change_from_current', current_lang): [f"{((price - current_price) / current_price * 100):+.2f}%" for price in predicted_prices],
+                get_text('price_movement', current_lang): [
+                    f"📈 {get_text('up', current_lang)}" if price > current_price else f"📉 {get_text('down', current_lang)}" if price < current_price else f"➡️ {get_text('flat', current_lang)}"
                     for price in predicted_prices
                 ]
             })
@@ -436,25 +436,25 @@ try:
                 hide_index=True
             )
         else:
-            st.info(f"🎯 **Exact Forecast for next {selected_horizon_display}:** ${predicted_final:,.4f} ({change_final:+.2f}%)")
+            st.info(f"🎯 **{get_text('exact_forecast_for_next', current_lang)} {selected_horizon_display}:** ${predicted_final:,.4f} ({change_final:+.2f}%)")
         
         # Summary statistics
         col1, col2, col3, col4 = st.columns(4)
         predicted_low = np.min(predicted_prices)
         change_low = (predicted_low - current_price) / current_price * 100
-        col1.metric("📉 Minimum Expected", f"${predicted_low:,.4f}", f"{change_low:+.2f}%")
+        col1.metric(f"📉 {get_text('minimum_expected', current_lang)}", f"${predicted_low:,.4f}", f"{change_low:+.2f}%")
         
         predicted_high = np.max(predicted_prices)
         change_high = (predicted_high - current_price) / current_price * 100
-        col2.metric("📈 Maximum Expected", f"${predicted_high:,.4f}", f"{change_high:+.2f}%")
+        col2.metric(f"📈 {get_text('maximum_expected', current_lang)}", f"${predicted_high:,.4f}", f"{change_high:+.2f}%")
         
         price_range = predicted_high - predicted_low
         range_pct = (price_range / current_price) * 100
-        col3.metric("📏 Price Range", f"${price_range:,.4f}", f"{range_pct:.2f}%")
+        col3.metric(f"📏 {get_text('price_range', current_lang)}", f"${price_range:,.4f}", f"{range_pct:.2f}%")
         
         volatility = np.std(predicted_prices)
         vol_pct = (volatility / current_price) * 100
-        col4.metric("⚡ Volatility", f"${volatility:,.4f}", f"{vol_pct:.2f}%")
+        col4.metric(f"⚡ {get_text('volatility', current_lang)}", f"${volatility:,.4f}", f"{vol_pct:.2f}%")
     
     st.subheader(get_text("trading_signal", current_lang))
     if signal == "Long":
@@ -466,13 +466,13 @@ try:
     st.caption(signal_reason)
     
     # --- Enhanced Trading Pattern Analysis ---
-    st.header("🔬 Advanced Trading Pattern Analysis")
+    st.header(f"🔬 {get_text('advanced_trading_pattern_analysis', current_lang)}")
     
     # Initialize trading pattern analyzer
     pattern_analyzer = get_trading_pattern_analyzer()
     
     if pattern_analyzer:
-        with st.spinner("Analyzing trading patterns..."):
+        with st.spinner(get_text("analyzing_trading_patterns", current_lang)):
             try:
                 # Detect price jumps
                 jump_analysis = pattern_analyzer.detect_price_jumps(df, 
@@ -495,45 +495,45 @@ try:
                 
                 # Display jump analysis
                 if jump_analysis:
-                    st.subheader("📊 Price Jump Analysis")
+                    st.subheader(f"📊 {get_text('price_jump_analysis', current_lang)}")
                     col1, col2, col3, col4 = st.columns(4)
                     
-                    col1.metric("⬆️ Upward Jumps", jump_analysis.get('jump_up_count', 0))
-                    col2.metric("⬇️ Downward Jumps", jump_analysis.get('jump_down_count', 0))
-                    col3.metric("📈 Avg Jump Size (Up)", f"{jump_analysis.get('avg_jump_up_size', 0):.2f}%")
-                    col4.metric("📉 Avg Jump Size (Down)", f"{jump_analysis.get('avg_jump_down_size', 0):.2f}%")
+                    col1.metric(f"⬆️ {get_text('upward_jumps', current_lang)}", jump_analysis.get('jump_up_count', 0))
+                    col2.metric(f"⬇️ {get_text('downward_jumps', current_lang)}", jump_analysis.get('jump_down_count', 0))
+                    col3.metric(f"📈 {get_text('avg_jump_size_up', current_lang)}", f"{jump_analysis.get('avg_jump_up_size', 0):.2f}%")
+                    col4.metric(f"📉 {get_text('avg_jump_size_down', current_lang)}", f"{jump_analysis.get('avg_jump_down_size', 0):.2f}%")
                     
                     if jump_analysis.get('post_jump_analysis'):
                         with st.expander("🔍 Post-Jump Behavior Analysis"):
                             for period, data in jump_analysis['post_jump_analysis'].items():
                                 st.write(f"**{period.replace('_', ' ').title()}:**")
                                 pcol1, pcol2, pcol3, pcol4 = st.columns(4)
-                                pcol1.metric("Avg Return After Up Jump", f"{data['avg_return_after_jump_up']:.2f}%")
-                                pcol2.metric("Avg Return After Down Jump", f"{data['avg_return_after_jump_down']:.2f}%")
-                                pcol3.metric("Up Jump Reversal Rate", f"{data['reversal_probability_up']*100:.1f}%")
-                                pcol4.metric("Down Jump Reversal Rate", f"{data['reversal_probability_down']*100:.1f}%")
+                                pcol1.metric(get_text('avg_return_after_up_jump', current_lang), f"{data['avg_return_after_jump_up']:.2f}%")
+                                pcol2.metric(get_text('avg_return_after_down_jump', current_lang), f"{data['avg_return_after_jump_down']:.2f}%")
+                                pcol3.metric(get_text('up_jump_reversal_rate', current_lang), f"{data['reversal_probability_up']*100:.1f}%")
+                                pcol4.metric(get_text('down_jump_reversal_rate', current_lang), f"{data['reversal_probability_down']*100:.1f}%")
                 
                 # Display support/resistance analysis
                 if sr_analysis and sr_analysis.get('levels'):
-                    st.subheader("🎯 Support & Resistance Levels")
+                    st.subheader(f"🎯 {get_text('support_resistance_levels', current_lang)}")
                     
                     # Show nearest levels
                     col1, col2 = st.columns(2)
                     
                     if sr_analysis.get('nearest_support'):
                         support = sr_analysis['nearest_support']
-                        col1.metric("🟢 Nearest Support", 
+                        col1.metric(f"🟢 {get_text('nearest_support', current_lang)}", 
                                    f"${support['price']:,.2f}", 
-                                   f"-{support['distance_pct']:.2f}% ({support['strength']} touches)")
+                                   f"-{support['distance_pct']:.2f}% ({support['strength']} {get_text('touches', current_lang)})")
                     
                     if sr_analysis.get('nearest_resistance'):
                         resistance = sr_analysis['nearest_resistance']
-                        col2.metric("🔴 Nearest Resistance", 
+                        col2.metric(f"🔴 {get_text('nearest_resistance', current_lang)}", 
                                    f"${resistance['price']:,.2f}", 
-                                   f"+{resistance['distance_pct']:.2f}% ({resistance['strength']} touches)")
+                                   f"+{resistance['distance_pct']:.2f}% ({resistance['strength']} {get_text('touches', current_lang)})")
                     
                     # Show all significant levels
-                    with st.expander("📋 All Significant Levels"):
+                    with st.expander(f"📋 {get_text('all_significant_levels', current_lang)}"):
                         levels_df = pd.DataFrame(sr_analysis['levels'])
                         if not levels_df.empty:
                             levels_df['price'] = levels_df['price'].apply(lambda x: f"${x:,.2f}")
@@ -542,29 +542,29 @@ try:
                 
                 # Display intraday patterns
                 if intraday_analysis:
-                    st.subheader("⏰ Intraday Trading Patterns")
+                    st.subheader(f"⏰ {get_text('intraday_trading_patterns', current_lang)}")
                     col1, col2, col3, col4 = st.columns(4)
                     
-                    col1.metric("📈 Peak Volume Hour", f"{intraday_analysis.get('peak_volume_hour', 'N/A')}:00 UTC")
-                    col2.metric("⚡ Peak Volatility Hour", f"{intraday_analysis.get('peak_volatility_hour', 'N/A')}:00 UTC")
-                    col3.metric("🟢 Most Bullish Hour", f"{intraday_analysis.get('most_bullish_hour', 'N/A')}:00 UTC")
-                    col4.metric("🔴 Most Bearish Hour", f"{intraday_analysis.get('most_bearish_hour', 'N/A')}:00 UTC")
+                    col1.metric(f"📈 {get_text('peak_volume_hour', current_lang)}", f"{intraday_analysis.get('peak_volume_hour', 'N/A')}:00 UTC")
+                    col2.metric(f"⚡ {get_text('peak_volatility_hour', current_lang)}", f"{intraday_analysis.get('peak_volatility_hour', 'N/A')}:00 UTC")
+                    col3.metric(f"🟢 {get_text('most_bullish_hour', current_lang)}", f"{intraday_analysis.get('most_bullish_hour', 'N/A')}:00 UTC")
+                    col4.metric(f"🔴 {get_text('most_bearish_hour', current_lang)}", f"{intraday_analysis.get('most_bearish_hour', 'N/A')}:00 UTC")
                     
                     # Session analysis
                     if intraday_analysis.get('session_analysis'):
-                        with st.expander("🌍 Trading Session Analysis"):
+                        with st.expander(f"🌍 {get_text('trading_session_analysis', current_lang)}"):
                             for session, data in intraday_analysis['session_analysis'].items():
-                                st.write(f"**{session.title()} Session ({session.upper()} Hours):**")
+                                st.write(f"**{session.title()} {get_text('session', current_lang)} ({session.upper()} {get_text('hours', current_lang)}):**")
                                 scol1, scol2, scol3, scol4 = st.columns(4)
-                                scol1.metric("Avg Volume", f"{data['avg_volume']:,.0f}")
-                                scol2.metric("Avg Volatility", f"{data['avg_volatility']:.2f}%")
-                                scol3.metric("Avg Price Change", f"{data['avg_price_change']:.2f}%")
+                                scol1.metric(get_text('avg_volume', current_lang), f"{data['avg_volume']:,.0f}")
+                                scol2.metric(get_text('avg_volatility', current_lang), f"{data['avg_volatility']:.2f}%")
+                                scol3.metric(get_text('avg_price_change', current_lang), f"{data['avg_price_change']:.2f}%")
                                 bias_color = "🟢" if data['directional_bias'] == 'bullish' else "🔴"
-                                scol4.metric("Directional Bias", f"{bias_color} {data['directional_bias'].title()}")
+                                scol4.metric(get_text('directional_bias', current_lang), f"{bias_color} {data['directional_bias'].title()}")
                 
                 # Display market microstructure
                 if microstructure_features:
-                    st.subheader("🧬 Market Microstructure")
+                    st.subheader(f"🧬 {get_text('market_microstructure', current_lang)}")
                     col1, col2, col3, col4 = st.columns(4)
                     
                     buying_pressure = microstructure_features.get('avg_buying_pressure', 0.5)
@@ -572,10 +572,10 @@ try:
                     net_pressure = microstructure_features.get('net_pressure_trend', 0)
                     momentum = microstructure_features.get('momentum_strength', 0)
                     
-                    col1.metric("🟢 Buying Pressure", f"{buying_pressure:.3f}")
-                    col2.metric("🔴 Selling Pressure", f"{selling_pressure:.3f}")
-                    col3.metric("⚖️ Net Pressure", f"{net_pressure:+.3f}")
-                    col4.metric("🚀 Momentum Strength", f"{momentum:+.3f}")
+                    col1.metric(f"🟢 {get_text('buying_pressure', current_lang)}", f"{buying_pressure:.3f}")
+                    col2.metric(f"🔴 {get_text('selling_pressure', current_lang)}", f"{selling_pressure:.3f}")
+                    col3.metric(f"⚖️ {get_text('net_pressure', current_lang)}", f"{net_pressure:+.3f}")
+                    col4.metric(f"🚀 {get_text('momentum_strength', current_lang)}", f"{momentum:+.3f}")
                     
                     # Market regime
                     regime = microstructure_features.get('market_regime', {})
@@ -585,29 +585,29 @@ try:
                     col1, col2 = st.columns(2)
                     vol_color = "🟡" if vol_regime == 'high' else "🟢"
                     vol_color_regime = "🟡" if volume_regime == 'high' else "🟢"
-                    col1.metric("📊 Volatility Regime", f"{vol_color} {vol_regime.title()}")
-                    col2.metric("📈 Volume Regime", f"{vol_color_regime} {volume_regime.title()}")
+                    col1.metric(f"📊 {get_text('volatility_regime', current_lang)}", f"{vol_color} {vol_regime.title()}")
+                    col2.metric(f"📈 {get_text('volume_regime', current_lang)}", f"{vol_color_regime} {volume_regime.title()}")
                 
                 # Display trading insights
                 if trading_insights:
-                    st.subheader("💡 Trading Insights & Recommendations")
+                    st.subheader(f"💡 {get_text('trading_insights_recommendations', current_lang)}")
                     
                     # Trading opportunities
                     if trading_insights.get('trading_opportunities'):
-                        st.write("**🎯 Trading Opportunities:**")
+                        st.write(f"**🎯 {get_text('trading_opportunities', current_lang)}:**")
                         for opp in trading_insights['trading_opportunities']:
                             confidence_color = {"high": "🟢", "medium": "🟡", "low": "🔴"}.get(opp.get('confidence', 'low'), "🔴")
                             st.success(f"{confidence_color} **{opp['type'].replace('_', ' ').title()}**: {opp['signal']}")
                     
                     # Risk factors
                     if trading_insights.get('risk_factors'):
-                        st.write("**⚠️ Risk Factors:**")
+                        st.write(f"**⚠️ {get_text('risk_factors', current_lang)}:**")
                         for risk in trading_insights['risk_factors']:
                             st.warning(f"• {risk}")
                     
                     # Pattern signals
                     if trading_insights.get('pattern_signals'):
-                        st.write("**📡 Pattern Signals:**")
+                        st.write(f"**📡 {get_text('pattern_signals', current_lang)}:**")
                         for signal in trading_insights['pattern_signals']:
                             if signal.get('actionable'):
                                 st.info(f"💡 **{signal['type'].replace('_', ' ').title()}**: {signal['signal']}")
@@ -615,7 +615,7 @@ try:
                                 st.write(f"• {signal['signal']}")
                 
                 # Create enhanced trading chart
-                st.subheader("📊 Enhanced Trading Chart")
+                st.subheader(f"📊 {get_text('enhanced_trading_chart', current_lang)}")
                 enhanced_chart = pattern_analyzer.create_enhanced_trading_chart(
                     df, jump_analysis, sr_analysis, symbol
                 )
@@ -623,10 +623,10 @@ try:
                 
                 # Enhance prediction features for better accuracy
                 enhanced_df = pattern_analyzer.enhance_prediction_features(df.copy())
-                st.success("✅ Trading pattern analysis completed! Enhanced features have been integrated for more accurate predictions.")
+                st.success(f"✅ {get_text('trading_pattern_analysis_completed', current_lang)}")
                 
             except Exception as e:
-                st.error(f"Error in trading pattern analysis: {str(e)}")
+                st.error(f"{get_text('error_in_trading_pattern_analysis', current_lang)} {str(e)}")
                 logging.error(f"Trading pattern analysis error: {str(e)}")
     
     # --- CryptoCompare Enhanced Analysis (for ALL cryptocurrencies) ---
@@ -640,48 +640,48 @@ try:
             col1, col2, col3 = st.columns(3)
             
             cc_price = cc_data['price']
-            col1.metric("🌐 CryptoCompare Price", f"${cc_price:,.4f}")
+            col1.metric(f"🌐 {get_text('cryptocompare_price', current_lang)}", f"${cc_price:,.4f}")
             
             if cryptocompare_enhancement.get('price_comparison'):
                 comparison = cryptocompare_enhancement['price_comparison']
                 exchange_price = comparison['exchange_price']
                 deviation = comparison['deviation_pct']
                 
-                col2.metric("📊 Exchange Price", f"${exchange_price:,.4f}")
-                col3.metric("📏 Price Deviation", f"{deviation:.2f}%", 
-                           delta=f"±{deviation:.2f}%" if deviation > 0.5 else "Aligned")
+                col2.metric(f"📊 {get_text('exchange_price', current_lang)}", f"${exchange_price:,.4f}")
+                col3.metric(f"📏 {get_text('price_deviation', current_lang)}", f"{deviation:.2f}%", 
+                           delta=f"±{deviation:.2f}%" if deviation > 0.5 else get_text("aligned", current_lang))
         
         # Market metrics
         if cryptocompare_enhancement.get('market_metrics'):
             metrics = cryptocompare_enhancement['market_metrics']
             
-            st.subheader("📊 Real-Time Market Metrics")
+            st.subheader(f"📊 {get_text('real_time_market_metrics', current_lang)}")
             col1, col2, col3, col4 = st.columns(4)
             
             if 'change_pct_24h' in metrics:
                 change_24h = metrics['change_pct_24h']
                 change_color = "🟢" if change_24h >= 0 else "🔴"
-                col1.metric(f"{change_color} 24h Change", f"{change_24h:+.2f}%")
+                col1.metric(f"{change_color} {get_text('24h_change', current_lang)}", f"{change_24h:+.2f}%")
             
             if 'volume_24h' in metrics and metrics['volume_24h'] > 0:
                 volume_m = metrics['volume_24h'] / 1_000_000
-                col2.metric("📈 24h Volume", f"${volume_m:.1f}M")
+                col2.metric(f"📈 {get_text('24h_volume', current_lang)}", f"${volume_m:.1f}M")
             
             if 'market_cap' in metrics and metrics['market_cap'] > 0:
                 market_cap_b = metrics['market_cap'] / 1_000_000_000
-                col3.metric("💎 Market Cap", f"${market_cap_b:.1f}B")
+                col3.metric(f"💎 {get_text('market_cap', current_lang)}", f"${market_cap_b:.1f}B")
             
             if 'high_24h' in metrics and 'low_24h' in metrics:
                 high_24h = metrics['high_24h']
                 low_24h = metrics['low_24h']
                 range_pct = ((high_24h - low_24h) / low_24h) * 100 if low_24h > 0 else 0
-                col4.metric("📏 24h Range", f"{range_pct:.2f}%")
+                col4.metric(f"📏 {get_text('24h_range', current_lang)}", f"{range_pct:.2f}%")
         
         # Advanced sentiment analysis
         if cryptocompare_enhancement.get('sentiment_analysis'):
             sentiment = cryptocompare_enhancement['sentiment_analysis']
             
-            st.subheader("🧠 Advanced Sentiment Analysis")
+            st.subheader(f"🧠 {get_text('advanced_sentiment_analysis', current_lang)}")
             
             # Overall sentiment score
             overall_score = sentiment.get('overall_score', 50)
@@ -692,65 +692,71 @@ try:
             # Sentiment gauge
             if overall_score >= 80:
                 sentiment_emoji = "🚀"
-                sentiment_text = "Very Bullish"
+                sentiment_text = get_text("very_bullish_text", current_lang)
                 sentiment_color = "success"
             elif overall_score >= 65:
                 sentiment_emoji = "📈"
-                sentiment_text = "Bullish"
+                sentiment_text = get_text("bullish_text", current_lang)
                 sentiment_color = "success"
             elif overall_score >= 35:
                 sentiment_emoji = "📊"
-                sentiment_text = "Neutral"
+                sentiment_text = get_text("neutral_text", current_lang)
                 sentiment_color = "info"
             elif overall_score >= 20:
                 sentiment_emoji = "📉"
-                sentiment_text = "Bearish"
+                sentiment_text = get_text("bearish_text", current_lang)
                 sentiment_color = "warning"
             else:
                 sentiment_emoji = "⛔"
-                sentiment_text = "Very Bearish"
+                sentiment_text = get_text("very_bearish_text", current_lang)
                 sentiment_color = "error"
             
-            col1.metric(f"{sentiment_emoji} Sentiment Score", f"{overall_score:.1f}/100")
-            col2.metric("📊 Analysis", sentiment_text)
-            col3.metric("🎯 Confidence", confidence.title())
+            col1.metric(f"{sentiment_emoji} {get_text('sentiment_score', current_lang)}", f"{overall_score:.1f}/100")
+            col2.metric(f"📊 {get_text('analysis', current_lang)}", sentiment_text)
+            col3.metric(f"🎯 {get_text('confidence', current_lang)}", confidence.title())
             
             # Sentiment factors breakdown
             if 'factors' in sentiment:
                 factors = sentiment['factors']
                 if factors:
-                    with st.expander("📊 Sentiment Factors Breakdown"):
+                    with st.expander(f"📊 {get_text('sentiment_factors_breakdown', current_lang)}"):
                         fcol1, fcol2, fcol3, fcol4 = st.columns(4)
                         
                         if 'price_momentum' in factors:
                             momentum_score = factors['price_momentum']
                             momentum_color = "🟢" if momentum_score >= 60 else "🟡" if momentum_score >= 40 else "🔴"
-                            fcol1.metric(f"{momentum_color} Price Momentum", f"{momentum_score:.1f}/100")
+                            fcol1.metric(f"{momentum_color} {get_text('price_momentum', current_lang)}", f"{momentum_score:.1f}/100")
                         
                         if 'volume_strength' in factors:
                             volume_score = factors['volume_strength']
                             volume_color = "🟢" if volume_score >= 60 else "🟡" if volume_score >= 40 else "🔴"
-                            fcol2.metric(f"{volume_color} Volume Strength", f"{volume_score:.1f}/100")
+                            fcol2.metric(f"{volume_color} {get_text('volume_strength', current_lang)}", f"{volume_score:.1f}/100")
                         
                         if 'social_activity' in factors:
                             social_score = factors['social_activity']
                             social_color = "🟢" if social_score >= 60 else "🟡" if social_score >= 40 else "🔴"
-                            fcol3.metric(f"{social_color} Social Activity", f"{social_score:.1f}/100")
+                            fcol3.metric(f"{social_color} {get_text('social_activity', current_lang)}", f"{social_score:.1f}/100")
                         
                         if 'news_sentiment' in factors:
                             news_score = factors['news_sentiment']
                             news_color = "🟢" if news_score >= 60 else "🟡" if news_score >= 40 else "🔴"
-                            fcol4.metric(f"{news_color} News Sentiment", f"{news_score:.1f}/100")
+                            fcol4.metric(f"{news_color} {get_text('news_sentiment', current_lang)}", f"{news_score:.1f}/100")
             
             # Sentiment signals
             if 'signals' in sentiment and sentiment['signals']:
-                st.subheader("📡 Market Signals")
+                st.subheader(f"📡 {get_text('market_signals', current_lang)}")
                 for signal in sentiment['signals']:
-                    if "Very Bullish" in signal or "Bullish" in signal:
+                    very_bullish_text = get_text("very_bullish_text", current_lang)
+                    bullish_text = get_text("bullish_text", current_lang)
+                    very_bearish_text = get_text("very_bearish_text", current_lang) 
+                    bearish_text = get_text("bearish_text", current_lang)
+                    neutral_text = get_text("neutral_text", current_lang)
+                    
+                    if very_bullish_text in signal or bullish_text in signal:
                         st.success(signal)
-                    elif "Very Bearish" in signal or "Bearish" in signal:
+                    elif very_bearish_text in signal or bearish_text in signal:
                         st.error(signal)
-                    elif "Neutral" in signal:
+                    elif neutral_text in signal:
                         st.info(signal)
                     else:
                         st.warning(signal)
@@ -762,17 +768,17 @@ try:
         
         # Risk factors
         if cryptocompare_enhancement.get('risk_factors'):
-            st.subheader("⚠️ Risk Factors")
+            st.subheader(f"⚠️ {get_text('risk_factors_header', current_lang)}")
             for risk in cryptocompare_enhancement['risk_factors']:
                 st.warning(f"• {risk}")
         
         # Opportunities
         if cryptocompare_enhancement.get('opportunities'):
-            st.subheader("✅ Market Opportunities")
+            st.subheader(f"✅ {get_text('market_opportunities_header', current_lang)}")
             for opportunity in cryptocompare_enhancement['opportunities']:
                 st.success(f"• {opportunity}")
         
-        st.caption(f"💡 CryptoCompare data enhances {base_symbol} predictions with comprehensive market intelligence, sentiment analysis, and social indicators.")
+        st.caption(f"💡 {get_text('cryptocompare_data_enhances', current_lang).format(base_symbol)}")
 
     # --- Plotting ---
     st.header(get_text("price_forecast_chart", current_lang))
@@ -794,17 +800,17 @@ try:
         # Add Bollinger Bands for futures
         fig.add_trace(go.Scatter(
             x=df.index[-100:], y=df['bb_upper'].iloc[-100:], 
-            name="Bollinger Upper", line=dict(color='gray', dash='dot'), opacity=0.5
+            name=get_text("bollinger_upper", current_lang), line=dict(color='gray', dash='dot'), opacity=0.5
         ))
         fig.add_trace(go.Scatter(
             x=df.index[-100:], y=df['bb_lower'].iloc[-100:], 
-            name="Bollinger Lower", line=dict(color='gray', dash='dot'), opacity=0.5,
+            name=get_text("bollinger_lower", current_lang), line=dict(color='gray', dash='dot'), opacity=0.5,
             fill='tonexty', fillcolor='rgba(128,128,128,0.1)'
         ))
 
     chart_title = f"{symbol} {get_text('price_forecast_for', current_lang)} {selected_horizon_display}"
     if market_type == "futures":
-        chart_title += " (Futures)"
+        chart_title += f" {get_text('futures', current_lang)}"
     
     fig.update_layout(
         title=chart_title,
@@ -820,24 +826,24 @@ try:
     
     # MACD Indicator
     if 'macd' in df.columns:
-        st.subheader("📊 MACD Indicator")
+        st.subheader(f"📊 {get_text('macd_indicator', current_lang)}")
         fig_macd = go.Figure()
         
         fig_macd.add_trace(go.Scatter(
             x=recent_data.index, y=recent_data['macd'], 
-            name="MACD", line=dict(color='blue')
+            name=get_text("macd", current_lang), line=dict(color='blue')
         ))
         fig_macd.add_trace(go.Scatter(
             x=recent_data.index, y=recent_data['macd_signal'], 
-            name="Signal", line=dict(color='red')
+            name=get_text("signal", current_lang), line=dict(color='red')
         ))
         fig_macd.add_trace(go.Bar(
             x=recent_data.index, y=recent_data['macd_histogram'], 
-            name="Histogram", opacity=0.6
+            name=get_text("histogram", current_lang), opacity=0.6
         ))
         
         fig_macd.update_layout(
-            title="MACD Analysis",
+            title=get_text("macd_analysis", current_lang),
             xaxis_title=get_text("date", current_lang),
             template='plotly_dark',
             height=400
@@ -846,36 +852,36 @@ try:
     
     # Stochastic Oscillator
     if 'stoch_k' in df.columns and 'stoch_d' in df.columns:
-        st.subheader("📈 Stochastic Oscillator")
+        st.subheader(f"📈 {get_text('stochastic_oscillator', current_lang)}")
         fig_stoch = go.Figure()
         
         fig_stoch.add_trace(go.Scatter(
             x=recent_data.index, y=recent_data['stoch_k'], 
-            name="%K (Fast)", line=dict(color='blue', width=2)
+            name=get_text("fast", current_lang), line=dict(color='blue', width=2)
         ))
         fig_stoch.add_trace(go.Scatter(
             x=recent_data.index, y=recent_data['stoch_d'], 
-            name="%D (Slow)", line=dict(color='red', width=2)
+            name=get_text("slow", current_lang), line=dict(color='red', width=2)
         ))
         
         # Add overbought/oversold levels
         fig_stoch.add_hline(y=80, line_dash="dash", line_color="gray", 
-                           annotation_text="Overbought (80)")
+                           annotation_text=f"{get_text('overbought', current_lang)} (80)")
         fig_stoch.add_hline(y=20, line_dash="dash", line_color="gray", 
-                           annotation_text="Oversold (20)")
+                           annotation_text=f"{get_text('oversold', current_lang)} (20)")
         fig_stoch.add_hline(y=50, line_dash="dot", line_color="lightgray", 
-                           annotation_text="Midline (50)", opacity=0.5)
+                           annotation_text=f"{get_text('midline', current_lang)} (50)", opacity=0.5)
         
         # Fill areas for overbought/oversold zones
         fig_stoch.add_hrect(y0=80, y1=100, fillcolor="red", opacity=0.1, 
-                           annotation_text="Overbought Zone", annotation_position="top left")
+                           annotation_text=get_text("overbought_zone", current_lang), annotation_position="top left")
         fig_stoch.add_hrect(y0=0, y1=20, fillcolor="green", opacity=0.1, 
-                           annotation_text="Oversold Zone", annotation_position="bottom left")
+                           annotation_text=get_text("oversold_zone", current_lang), annotation_position="bottom left")
         
         fig_stoch.update_layout(
-            title="Stochastic Oscillator (%K and %D)",
+            title=f"{get_text('stochastic_oscillator', current_lang)} (%K and %D)",
             xaxis_title=get_text("date", current_lang),
-            yaxis_title="Value (%)",
+            yaxis_title=f"{get_text('value', current_lang)} (%)",
             template='plotly_dark',
             height=400,
             yaxis=dict(range=[0, 100])
@@ -887,17 +893,17 @@ try:
         latest_d = recent_data['stoch_d'].iloc[-1]
         
         if latest_k > 80 and latest_d > 80:
-            st.warning("⚠️ **Signal**: Asset in overbought zone. Possible price decline.")
+            st.warning(f"⚠️ {get_text('signal_asset_overbought', current_lang)}")
         elif latest_k < 20 and latest_d < 20:
-            st.success("💡 **Signal**: Asset in oversold zone. Possible price bounce.")
+            st.success(f"💡 {get_text('signal_asset_oversold', current_lang)}")
         elif latest_k > latest_d and latest_k > 50:
-            st.info("📈 **Signal**: %K above %D and above 50 - bullish signal.")
+            st.info(f"📈 {get_text('signal_bullish', current_lang)}")
         elif latest_k < latest_d and latest_k < 50:
-            st.info("📉 **Signal**: %K below %D and below 50 - bearish signal.")
+            st.info(f"📉 {get_text('signal_bearish', current_lang)}")
         else:
-            st.info("➡️ **Status**: Neutral stochastic oscillator readings.")
+            st.info(f"➡️ {get_text('status_neutral', current_lang)}")
         
-        st.caption(f"Current values: %K = {latest_k:.2f}, %D = {latest_d:.2f}")
+        st.caption(f"{get_text('current_values', current_lang)}: %K = {latest_k:.2f}, %D = {latest_d:.2f}")
 
 except Exception as e:
     logging.error(f"Application error: {str(e)}")
