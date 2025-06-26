@@ -280,6 +280,33 @@ class FuturesDataLoader:
             # Volume Indicators
             df['obv'] = OnBalanceVolumeIndicator(df['close'], df['volume']).on_balance_volume()
             df['cmf'] = ChaikinMoneyFlowIndicator(df['high'], df['low'], df['close'], df['volume']).chaikin_money_flow()
+            
+            # Ichimoku Cloud
+            # Tenkan-sen (Conversion Line): (9-period high + 9-period low) / 2
+            df['tenkan_sen'] = (df['high'].rolling(window=9).max() + df['low'].rolling(window=9).min()) / 2
+            
+            # Kijun-sen (Base Line): (26-period high + 26-period low) / 2
+            df['kijun_sen'] = (df['high'].rolling(window=26).max() + df['low'].rolling(window=26).min()) / 2
+            
+            # Senkou Span A (Leading Span A): (Tenkan-sen + Kijun-sen) / 2, shifted 26 periods ahead
+            df['senkou_span_a'] = ((df['tenkan_sen'] + df['kijun_sen']) / 2).shift(26)
+            
+            # Senkou Span B (Leading Span B): (52-period high + 52-period low) / 2, shifted 26 periods ahead
+            df['senkou_span_b'] = ((df['high'].rolling(window=52).max() + df['low'].rolling(window=52).min()) / 2).shift(26)
+            
+            # Chikou Span (Lagging Span): Close price shifted 26 periods back
+            df['chikou_span'] = df['close'].shift(-26)
+            
+            # Cloud boundaries (for easier analysis)
+            df['cloud_top'] = df[['senkou_span_a', 'senkou_span_b']].max(axis=1)
+            df['cloud_bottom'] = df[['senkou_span_a', 'senkou_span_b']].min(axis=1)
+            
+            # Cloud color determination (bullish when Span A > Span B)
+            df['cloud_color'] = np.where(df['senkou_span_a'] > df['senkou_span_b'], 1, -1)  # 1 = bullish, -1 = bearish
+            
+            # Price position relative to cloud
+            df['price_vs_cloud'] = np.where(df['close'] > df['cloud_top'], 1,  # Above cloud
+                                          np.where(df['close'] < df['cloud_bottom'], -1, 0))  # Below cloud / In cloud
 
             # Merge external data if available
             df_oi = self.get_open_interest(df.attrs.get('symbol', ''))
@@ -291,7 +318,7 @@ class FuturesDataLoader:
             if not df_funding.empty:
                 df = df.join(df_funding.reindex(df.index, method='ffill'))
 
-            logging.info("Successfully added futures-specific technical indicators")
+            logging.info("Successfully added futures-specific technical indicators including Ichimoku Cloud")
             return df
         except Exception as e:
             logging.error(f"Error in add_futures_indicators: {str(e)}")
@@ -308,7 +335,7 @@ class FuturesDataLoader:
             features = [
                 'close', 'volume', 'sma_20', 'sma_50', 'rsi', 'macd', 
                 'bb_width', 'stoch_k', 'atr', 'obv', 'cmf', 
-                'fundingRate', 'openInterest'
+                'fundingRate', 'openInterest', 'tenkan_sen', 'kijun_sen', 'price_vs_cloud'
             ]
             
             # Ensure all features exist in the dataframe

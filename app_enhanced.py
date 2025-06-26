@@ -904,6 +904,185 @@ try:
             st.info(f"➡️ {get_text('status_neutral', current_lang)}")
         
         st.caption(f"{get_text('current_values', current_lang)}: %K = {latest_k:.2f}, %D = {latest_d:.2f}")
+    
+    # Ichimoku Cloud Analysis
+    if all(col in df.columns for col in ['tenkan_sen', 'kijun_sen', 'senkou_span_a', 'senkou_span_b', 'chikou_span']):
+        st.subheader(f"☁️ {get_text('ichimoku_analysis', current_lang)}")
+        
+        # Create Ichimoku chart
+        fig_ichimoku = go.Figure()
+        
+        # Add price candlesticks
+        fig_ichimoku.add_trace(go.Candlestick(
+            x=recent_data.index,
+            open=recent_data['open'],
+            high=recent_data['high'],
+            low=recent_data['low'],
+            close=recent_data['close'],
+            name=get_text("historical_price", current_lang),
+            opacity=0.8
+        ))
+        
+        # Add Tenkan-sen (Conversion Line)
+        fig_ichimoku.add_trace(go.Scatter(
+            x=recent_data.index, y=recent_data['tenkan_sen'],
+            name=get_text("tenkan_sen", current_lang), 
+            line=dict(color='red', width=1),
+            opacity=0.8
+        ))
+        
+        # Add Kijun-sen (Base Line)
+        fig_ichimoku.add_trace(go.Scatter(
+            x=recent_data.index, y=recent_data['kijun_sen'],
+            name=get_text("kijun_sen", current_lang), 
+            line=dict(color='blue', width=2),
+            opacity=0.8
+        ))
+        
+        # Add Chikou Span (Lagging Span)
+        valid_chikou = recent_data.dropna(subset=['chikou_span'])
+        if not valid_chikou.empty:
+            fig_ichimoku.add_trace(go.Scatter(
+                x=valid_chikou.index, y=valid_chikou['chikou_span'],
+                name=get_text("chikou_span", current_lang), 
+                line=dict(color='purple', width=1, dash='dot'),
+                opacity=0.7
+            ))
+        
+        # Add Senkou Span A (Leading Span A)
+        valid_span_a = recent_data.dropna(subset=['senkou_span_a'])
+        if not valid_span_a.empty:
+            fig_ichimoku.add_trace(go.Scatter(
+                x=valid_span_a.index, y=valid_span_a['senkou_span_a'],
+                name=get_text("senkou_span_a", current_lang), 
+                line=dict(color='green', width=1),
+                opacity=0.6
+            ))
+        
+        # Add Senkou Span B (Leading Span B)
+        valid_span_b = recent_data.dropna(subset=['senkou_span_b'])
+        if not valid_span_b.empty:
+            fig_ichimoku.add_trace(go.Scatter(
+                x=valid_span_b.index, y=valid_span_b['senkou_span_b'],
+                name=get_text("senkou_span_b", current_lang), 
+                line=dict(color='orange', width=1),
+                fill='tonexty', fillcolor='rgba(128,128,128,0.1)',
+                opacity=0.6
+            ))
+        
+        # Color the cloud based on bullish/bearish
+        if 'cloud_color' in recent_data.columns:
+            bullish_periods = recent_data[recent_data['cloud_color'] == 1]
+            bearish_periods = recent_data[recent_data['cloud_color'] == -1]
+            
+            # Add bullish cloud sections
+            if not bullish_periods.empty and 'senkou_span_a' in bullish_periods.columns and 'senkou_span_b' in bullish_periods.columns:
+                valid_bullish = bullish_periods.dropna(subset=['senkou_span_a', 'senkou_span_b'])
+                if not valid_bullish.empty:
+                    fig_ichimoku.add_trace(go.Scatter(
+                        x=valid_bullish.index, y=valid_bullish['senkou_span_a'],
+                        fill='tonexty', fillcolor='rgba(0,255,0,0.1)',
+                        line=dict(color='rgba(0,0,0,0)'),
+                        name=get_text("bullish_cloud", current_lang),
+                        showlegend=False
+                    ))
+            
+            # Add bearish cloud sections
+            if not bearish_periods.empty and 'senkou_span_a' in bearish_periods.columns and 'senkou_span_b' in bearish_periods.columns:
+                valid_bearish = bearish_periods.dropna(subset=['senkou_span_a', 'senkou_span_b'])
+                if not valid_bearish.empty:
+                    fig_ichimoku.add_trace(go.Scatter(
+                        x=valid_bearish.index, y=valid_bearish['senkou_span_a'],
+                        fill='tonexty', fillcolor='rgba(255,0,0,0.1)',
+                        line=dict(color='rgba(0,0,0,0)'),
+                        name=get_text("bearish_cloud", current_lang),
+                        showlegend=False
+                    ))
+        
+        fig_ichimoku.update_layout(
+            title=get_text("ichimoku_analysis", current_lang),
+            xaxis_title=get_text("date", current_lang),
+            yaxis_title=get_text("price_usdt", current_lang),
+            template='plotly_dark',
+            height=600,
+            showlegend=True
+        )
+        
+        st.plotly_chart(fig_ichimoku, use_container_width=True)
+        
+        # Ichimoku Analysis and Signals
+        latest_data = recent_data.iloc[-1]
+        if pd.notna(latest_data.get('tenkan_sen')) and pd.notna(latest_data.get('kijun_sen')):
+            latest_price = latest_data['close']
+            latest_tenkan = latest_data['tenkan_sen']
+            latest_kijun = latest_data['kijun_sen']
+            
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                st.metric(get_text("tenkan_sen", current_lang), f"${latest_tenkan:.4f}")
+                st.metric(get_text("kijun_sen", current_lang), f"${latest_kijun:.4f}")
+            
+            with col2:
+                if 'cloud_top' in latest_data and 'cloud_bottom' in latest_data:
+                    if pd.notna(latest_data['cloud_top']) and pd.notna(latest_data['cloud_bottom']):
+                        cloud_top = latest_data['cloud_top']
+                        cloud_bottom = latest_data['cloud_bottom']
+                        st.metric(f"{get_text('kumo_cloud', current_lang)} {get_text('high', current_lang)}", f"${cloud_top:.4f}")
+                        st.metric(f"{get_text('kumo_cloud', current_lang)} {get_text('low', current_lang)}", f"${cloud_bottom:.4f}")
+                
+                        # Determine price position relative to cloud
+                        if latest_price > cloud_top:
+                            price_position = get_text("price_above_cloud", current_lang)
+                            position_color = "success"
+                        elif latest_price < cloud_bottom:
+                            price_position = get_text("price_below_cloud", current_lang)
+                            position_color = "error"
+                        else:
+                            price_position = get_text("price_in_cloud", current_lang)
+                            position_color = "warning"
+                        
+                        st.write(f"**{get_text('current_price', current_lang)}**: {price_position}")
+            
+            with col3:
+                # Tenkan-Kijun Cross Analysis
+                if latest_tenkan > latest_kijun:
+                    cross_signal = get_text("golden_cross", current_lang)
+                    cross_color = "success"
+                else:
+                    cross_signal = get_text("death_cross", current_lang)
+                    cross_color = "error"
+                
+                st.write(f"**{get_text('tenkan_kijun_cross', current_lang)}**: {cross_signal}")
+                
+                # Cloud color
+                if 'cloud_color' in latest_data and pd.notna(latest_data['cloud_color']):
+                    if latest_data['cloud_color'] == 1:
+                        cloud_trend = get_text("bullish_cloud", current_lang)
+                    else:
+                        cloud_trend = get_text("bearish_cloud", current_lang)
+                    st.write(f"**{get_text('kumo_cloud', current_lang)}**: {cloud_trend}")
+            
+            # Generate Ichimoku trading signal
+            ichimoku_signal = ""
+            if 'price_vs_cloud' in latest_data and pd.notna(latest_data['price_vs_cloud']):
+                price_vs_cloud = latest_data['price_vs_cloud']
+                
+                if price_vs_cloud == 1 and latest_tenkan > latest_kijun:  # Above cloud + bullish cross
+                    ichimoku_signal = get_text("ichimoku_signal_bullish", current_lang)
+                    st.success(ichimoku_signal)
+                elif price_vs_cloud == -1 and latest_tenkan < latest_kijun:  # Below cloud + bearish cross
+                    ichimoku_signal = get_text("ichimoku_signal_bearish", current_lang)
+                    st.error(ichimoku_signal)
+                elif price_vs_cloud == 0:  # Inside cloud
+                    ichimoku_signal = get_text("ichimoku_signal_consolidation", current_lang)
+                    st.warning(ichimoku_signal)
+                else:
+                    ichimoku_signal = get_text("ichimoku_signal_neutral", current_lang)
+                    st.info(ichimoku_signal)
+            
+            # Additional insights
+            st.caption("💡 Ichimoku Cloud provides comprehensive trend analysis combining momentum, support/resistance, and future trend projection.")
 
 except Exception as e:
     logging.error(f"Application error: {str(e)}")
