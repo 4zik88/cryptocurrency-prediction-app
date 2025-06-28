@@ -523,14 +523,14 @@ try:
                     if sr_analysis.get('nearest_support'):
                         support = sr_analysis['nearest_support']
                         col1.metric(f"🟢 {get_text('nearest_support', current_lang)}", 
-                                   f"${support['price']:,.2f}", 
-                                   f"-{support['distance_pct']:.2f}% ({support['strength']} {get_text('touches', current_lang)})")
+                                   f"${support['price']:,.2f} ({support['strength']} {get_text('touches', current_lang)})", 
+                                   f"-{support['distance_pct']:.2f}%")
                     
                     if sr_analysis.get('nearest_resistance'):
                         resistance = sr_analysis['nearest_resistance']
                         col2.metric(f"🔴 {get_text('nearest_resistance', current_lang)}", 
-                                   f"${resistance['price']:,.2f}", 
-                                   f"+{resistance['distance_pct']:.2f}% ({resistance['strength']} {get_text('touches', current_lang)})")
+                                   f"${resistance['price']:,.2f} ({resistance['strength']} {get_text('touches', current_lang)})", 
+                                   f"+{resistance['distance_pct']:.2f}%")
                     
                     # Show all significant levels
                     with st.expander(f"📋 {get_text('all_significant_levels', current_lang)}"):

@@ -325,7 +325,7 @@ class TradingPatternAnalyzer:
                         y=level['price'],
                         line_dash="dash",
                         line_color=color,
-                        annotation_text=f"{level['type'].title()} ({level['strength']} touches)",
+                        annotation_text=f"{level['type'].title()} (${level['price']:,.2f} - {level['strength']} touches)",
                         row=1, col=1
                     )
             
