@@ -96,5 +96,35 @@ Add your CryptoCompare API key to environment variables:
 export CRYPTOCOMPARE_API_KEY="your_api_key_here"
 ```
 
+## Language Support
+
+This application now supports **full internationalization** with proper language separation:
+
+### Supported Languages
+- **English** (`en`) - Complete interface in English
+- **Russian** (`ru`) - Complete interface in Russian
+
+### Language Features
+- Dynamic language switching in the app interface
+- Console output language can be configured via environment variable
+- No mixed language content - clean separation between English and Russian
+- All user-facing text is properly translated
+
+### Console Language Configuration
+You can set the console language for the runner script:
+```bash
+# For English console output
+export CONSOLE_LANGUAGE=en
+python3 run_enhanced_app.py
+
+# For Russian console output (default)
+export CONSOLE_LANGUAGE=ru
+python3 run_enhanced_app.py
+```
+
+## Development
+
+The application uses Streamlit for the web interface and includes comprehensive language support through the `translations.py` module.
+
 ---
 *Built with Streamlit, TensorFlow, Bybit API, and CryptoCompare Market Intelligence* 

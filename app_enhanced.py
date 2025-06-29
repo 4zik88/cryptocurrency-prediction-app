@@ -692,23 +692,23 @@ try:
             # Sentiment gauge
             if overall_score >= 80:
                 sentiment_emoji = "🚀"
-                sentiment_text = get_text("very_bullish_text", current_lang)
+                sentiment_text = get_text("very_bullish", current_lang)
                 sentiment_color = "success"
             elif overall_score >= 65:
                 sentiment_emoji = "📈"
-                sentiment_text = get_text("bullish_text", current_lang)
+                sentiment_text = get_text("bullish", current_lang)
                 sentiment_color = "success"
             elif overall_score >= 35:
                 sentiment_emoji = "📊"
-                sentiment_text = get_text("neutral_text", current_lang)
+                sentiment_text = get_text("neutral", current_lang)
                 sentiment_color = "info"
             elif overall_score >= 20:
                 sentiment_emoji = "📉"
-                sentiment_text = get_text("bearish_text", current_lang)
+                sentiment_text = get_text("bearish", current_lang)
                 sentiment_color = "warning"
             else:
                 sentiment_emoji = "⛔"
-                sentiment_text = get_text("very_bearish_text", current_lang)
+                sentiment_text = get_text("very_bearish", current_lang)
                 sentiment_color = "error"
             
             col1.metric(f"{sentiment_emoji} {get_text('sentiment_score', current_lang)}", f"{overall_score:.1f}/100")
@@ -746,11 +746,11 @@ try:
             if 'signals' in sentiment and sentiment['signals']:
                 st.subheader(f"📡 {get_text('market_signals', current_lang)}")
                 for signal in sentiment['signals']:
-                    very_bullish_text = get_text("very_bullish_text", current_lang)
-                    bullish_text = get_text("bullish_text", current_lang)
-                    very_bearish_text = get_text("very_bearish_text", current_lang) 
-                    bearish_text = get_text("bearish_text", current_lang)
-                    neutral_text = get_text("neutral_text", current_lang)
+                    very_bullish_text = get_text("very_bullish", current_lang)
+                    bullish_text = get_text("bullish", current_lang)
+                    very_bearish_text = get_text("very_bearish", current_lang) 
+                    bearish_text = get_text("bearish", current_lang)
+                    neutral_text = get_text("neutral", current_lang)
                     
                     if very_bullish_text in signal or bullish_text in signal:
                         st.success(signal)
