@@ -12,6 +12,7 @@ from trading_pattern_analyzer import TradingPatternAnalyzer
 import os
 from translations import get_text, init_language, get_current_language, set_language
 import numpy as np
+from enhanced_short_term_predictor import EnhancedShortTermPredictor
 
 # Configure logging
 logging.basicConfig(level=logging.INFO,
@@ -71,6 +72,11 @@ def get_trading_pattern_analyzer():
         st.warning(f"{get_text('trading_pattern_analyzer_failed', get_current_language())} {str(e)}")
         return None
 
+@st.cache_resource
+def get_enhanced_short_term_predictor(horizon, market_type):
+    """Get cached enhanced short-term predictor"""
+    return EnhancedShortTermPredictor(n_future_steps=horizon, market_type=market_type)
+
 # --- State Management ---
 def initialize_state():
     """Initialize session state for filters if they don't exist."""
@@ -82,6 +88,7 @@ def initialize_state():
         st.session_state.n_future_steps = 1
         st.session_state.lookback_days = 365
         st.session_state.threshold = 2.0
+        st.session_state.model_type = "classic"
 
 def reset_filters():
     """Reset all filter values to defaults."""
@@ -90,6 +97,7 @@ def reset_filters():
     st.session_state.n_future_steps = 1
     st.session_state.lookback_days = 365
     st.session_state.threshold = 2.0
+    st.session_state.model_type = "classic"
     st.rerun()
 
 # Initialize state at the beginning of the script
@@ -130,6 +138,27 @@ selected_market_display = st.sidebar.selectbox(
     index=current_market_index
 )
 st.session_state.market_type = market_types_map[selected_market_display]
+
+# Model Type Selection
+model_types_map = {
+    get_text("classic_model", current_lang): "classic",
+    get_text("enhanced_short_term_model", current_lang): "enhanced_short_term"
+}
+model_display_options = list(model_types_map.keys())
+model_internal_values = list(model_types_map.values())
+
+try:
+    current_model_index = model_internal_values.index(st.session_state.model_type)
+except (ValueError, KeyError):
+    current_model_index = 0
+    st.session_state.model_type = "classic"
+
+selected_model_display = st.sidebar.selectbox(
+    get_text("select_model_type", current_lang),
+    model_display_options,
+    index=current_model_index
+)
+st.session_state.model_type = model_types_map[selected_model_display]
 
 # Initialize appropriate data loader based on market type
 data_loader = get_spot_data_loader() if st.session_state.market_type == "spot" else get_futures_data_loader()
@@ -225,10 +254,13 @@ def get_spot_predictor(horizon):
 def get_futures_predictor(horizon):
     return FuturesLSTMPredictor(n_future_steps=horizon)
 
-if market_type == "spot":
-    predictor = get_spot_predictor(n_future_steps)
+if st.session_state.model_type == "enhanced_short_term":
+    predictor = get_enhanced_short_term_predictor(n_future_steps, st.session_state.market_type)
 else:
-    predictor = get_futures_predictor(n_future_steps)
+    if market_type == "spot":
+        predictor = get_spot_predictor(n_future_steps)
+    else:
+        predictor = get_futures_predictor(n_future_steps)
 
 # --- Main Content ---
 title_key = "futures_prediction_title" if market_type == "futures" else "price_prediction_title"
@@ -253,7 +285,7 @@ try:
     # 1. Fetch and prepare data based on market type
     with st.spinner(get_text("fetching_data", current_lang, selected_horizon_display)):
         if market_type == "spot":
-            df = data_loader.fetch_historical_data(symbol=symbol, lookback_days=lookback_days)
+            df = data_loader.fetch_historical_data(symbol=symbol, lookback_days=lookback_days, interval='60')
             if df.empty:
                 st.error(get_text("failed_fetch_data", current_lang))
                 st.stop()
@@ -269,9 +301,9 @@ try:
                 except Exception as e:
                     logging.warning(f"Could not enhance spot prediction features: {str(e)}")
             
-            X_train, y_train, X_test, y_test, original_y_test = data_loader.prepare_data(df, n_future_steps=n_future_steps)
+            X_train, y_train, X_test, y_test, original_y_test = data_loader.prepare_data(df, n_future_steps=n_future_steps, sequence_length=predictor.sequence_length if hasattr(predictor, 'sequence_length') else 24)
         else:
-            df = data_loader.fetch_futures_data(symbol=symbol, lookback_days=lookback_days)
+            df = data_loader.fetch_futures_data(symbol=symbol, lookback_days=lookback_days, interval='60')
             if df.empty:
                 st.error(get_text("failed_fetch_data", current_lang))
                 st.stop()
@@ -287,7 +319,7 @@ try:
                 except Exception as e:
                     logging.warning(f"Could not enhance futures prediction features: {str(e)}")
             
-            X_train, y_train, X_test, y_test, original_y_test = data_loader.prepare_futures_data(df, n_future_steps=n_future_steps)
+            X_train, y_train, X_test, y_test, original_y_test = data_loader.prepare_futures_data(df, n_future_steps=n_future_steps, sequence_length=predictor.sequence_length if hasattr(predictor, 'sequence_length') else 24)
 
         if X_train is None:
             st.error(get_text("insufficient_data", current_lang))
@@ -297,14 +329,28 @@ try:
     n_features = X_train.shape[2]
     if not predictor.load_model(n_features):
         with st.spinner(get_text("training_model", current_lang, selected_horizon_display)):
-            predictor.train(X_train, y_train)
+            if st.session_state.model_type == "enhanced_short_term":
+                # For enhanced model, we can pass validation data directly if available
+                # This can be improved by splitting data inside the train function.
+                predictor.train(X_train, y_train) 
+            else:
+                predictor.train(X_train, y_train)
     
     # 3. Generate and process predictions
     with st.spinner(get_text("generating_predictions", current_lang)):
         last_sequence = X_test[-1].reshape(1, X_test.shape[1], X_test.shape[2])
-        predicted_scaled_sequence = predictor.predict(last_sequence)[0]
-        predicted_prices = data_loader.inverse_transform_price(predicted_scaled_sequence)
-    
+        
+        # Enhanced predictor has uncertainty estimation
+        if st.session_state.model_type == "enhanced_short_term":
+            predicted_scaled_sequence, lower_bound, upper_bound = predictor.predict_with_uncertainty(last_sequence)
+            predicted_prices = data_loader.inverse_transform_price(predicted_scaled_sequence.flatten())
+            lower_prices = data_loader.inverse_transform_price(lower_bound.flatten())
+            upper_prices = data_loader.inverse_transform_price(upper_bound.flatten())
+        else:
+            predicted_scaled_sequence = predictor.predict(last_sequence)[0]
+            predicted_prices = data_loader.inverse_transform_price(predicted_scaled_sequence)
+            lower_prices, upper_prices = None, None
+
     current_price = df['close'].iloc[-1]
     
     # 4. Enhance predictions with CryptoCompare data (for ALL cryptocurrencies)

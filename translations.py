@@ -4,7 +4,7 @@ import streamlit as st
 TRANSLATIONS = {
     "en": {
         # Page config
-        "page_title": "Crypto Price Prediction",
+        "page_title": "Real-time Crypto Price Forecast",
         
         # Sidebar
         "configuration": "Configuration",
@@ -12,6 +12,9 @@ TRANSLATIONS = {
         "select_market_type": "Select Market Type",
         "spot_market": "Spot Market",
         "futures_market": "Futures Market",
+        "select_model_type": "Select Model Type",
+        "classic_model": "Classic Model",
+        "enhanced_short_term_model": "Enhanced Short-Term",
         "refresh_pairs": "🔄 Refresh Pairs",
         "select_prediction_horizon": "Select Prediction Horizon",
         "historical_data_days": "Historical Data (days)",
@@ -263,15 +266,18 @@ TRANSLATIONS = {
     
     "ru": {
         # Page config
-        "page_title": "Прогнозирование цен криптовалют",
+        "page_title": "Прогноз цен на криптовалюты в реальном времени",
         
         # Sidebar
-        "configuration": "Настройки",
+        "configuration": "Конфигурация",
         "select_cryptocurrency": "Выберите криптовалюту",
         "select_market_type": "Выберите тип рынка",
         "spot_market": "Спотовый рынок",
         "futures_market": "Фьючерсный рынок",
-        "refresh_pairs": "🔄 Обновить пары",
+        "select_model_type": "Выберите тип модели",
+        "classic_model": "Классическая модель",
+        "enhanced_short_term_model": "Улучшенная краткоср.",
+        "refresh_pairs": "Обновить пары",
         "select_prediction_horizon": "Выберите горизонт прогнозирования",
         "historical_data_days": "Исторические данные (дни)",
         "signal_threshold": "Порог сигнала (%)",

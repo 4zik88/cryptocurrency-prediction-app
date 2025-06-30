@@ -6,8 +6,8 @@ from pybit.unified_trading import HTTP
 from ta.trend import SMAIndicator, EMAIndicator
 from ta.momentum import RSIIndicator, StochasticOscillator
 from ta.volatility import BollingerBands
-from ta.volume import OnBalanceVolumeIndicator, ChaikinMoneyFlowIndicator
-from sklearn.preprocessing import MinMaxScaler
+from ta.volume import OnBalanceVolumeIndicator, ChaikinMoneyFlowIndicator, VolumePriceTrendIndicator
+from sklearn.preprocessing import MinMaxScaler, RobustScaler
 from dotenv import load_dotenv
 import logging
 
@@ -48,7 +48,8 @@ class FuturesDataLoader:
             logging.error(f"Failed to initialize Bybit client: {str(e)}")
             raise
             
-        self.scaler = MinMaxScaler()
+        self.scaler = RobustScaler()
+        self.min_max_scaler = MinMaxScaler()
         
     def fetch_futures_data(self, symbol, interval='60', lookback_days=180):
         """Fetch historical futures OHLCV data from Bybit.
@@ -218,7 +219,7 @@ class FuturesDataLoader:
             return pd.DataFrame()
 
     def add_futures_indicators(self, df):
-        """Add technical indicators specific to futures trading."""
+        """Add futures-specific technical indicators."""
         if df.empty:
             logging.warning("Empty dataframe provided to add_futures_indicators")
             return df
@@ -308,20 +309,22 @@ class FuturesDataLoader:
             df['price_vs_cloud'] = np.where(df['close'] > df['cloud_top'], 1,  # Above cloud
                                           np.where(df['close'] < df['cloud_bottom'], -1, 0))  # Below cloud / In cloud
 
-            # Merge external data if available
-            df_oi = self.get_open_interest(df.attrs.get('symbol', ''))
-            if not df_oi.empty:
-                df = df.join(df_oi.reindex(df.index, method='ffill'))
-                df['open_interest_change'] = df['openInterest'].pct_change()
+            # Additional features for futures
+            df = self.fetch_and_merge_funding_rate(df, symbol)
+            df = self.fetch_and_merge_open_interest(df, symbol)
             
-            df_funding = self.get_funding_rate(df.attrs.get('symbol', ''))
-            if not df_funding.empty:
-                df = df.join(df_funding.reindex(df.index, method='ffill'))
-
-            logging.info("Successfully added futures-specific technical indicators including Ichimoku Cloud")
+            # Interaction features
+            df['oi_change_pct'] = df['openInterest'].pct_change()
+            df['funding_rate_rolling_mean'] = df['fundingRate'].rolling(window=8).mean() # 8-hour funding cycle
+            df['price_oi_correlation'] = df['close'].rolling(window=24).corr(df['openInterest'])
+            
+            # Remove rows with NaN values after adding all indicators
+            df.dropna(inplace=True)
+            logging.info(f"Futures indicators added, dataframe shape: {df.shape}")
             return df
+            
         except Exception as e:
-            logging.error(f"Error in add_futures_indicators: {str(e)}")
+            logging.error(f"Error adding futures indicators: {str(e)}")
             return df
 
     def prepare_futures_data(self, df, sequence_length=24, n_future_steps=1, train_split=0.8):
@@ -335,7 +338,8 @@ class FuturesDataLoader:
             features = [
                 'close', 'volume', 'sma_20', 'sma_50', 'rsi', 'macd', 
                 'bb_width', 'stoch_k', 'atr', 'obv', 'cmf', 
-                'fundingRate', 'openInterest', 'tenkan_sen', 'kijun_sen', 'price_vs_cloud'
+                'fundingRate', 'openInterest', 'tenkan_sen', 'kijun_sen', 'price_vs_cloud',
+                'oi_change_pct', 'funding_rate_rolling_mean', 'price_oi_correlation'
             ]
             
             # Ensure all features exist in the dataframe
@@ -392,7 +396,6 @@ class FuturesDataLoader:
 
     def inverse_transform_price(self, scaled_prices):
         """Convert scaled prices back to original scale."""
-        # Create a dummy array with the same shape as the scaler expects
         if scaled_prices.ndim == 1:
             scaled_prices = scaled_prices.reshape(-1, 1)
         
@@ -461,4 +464,51 @@ class FuturesDataLoader:
             
         except Exception as e:
             logging.error(f"Error calculating futures metrics: {str(e)}")
-            return {} 
+            return {}
+
+    def fetch_and_merge_funding_rate(self, df, symbol):
+        """Fetch funding rate data and merge it with the existing dataframe."""
+        try:
+            df_funding = self.get_funding_rate(symbol)
+            if not df_funding.empty:
+                df = df.join(df_funding.reindex(df.index, method='ffill'))
+            return df
+        except Exception as e:
+            logging.error(f"Error in fetch_and_merge_funding_rate: {str(e)}")
+            return df
+
+    def fetch_and_merge_open_interest(self, df, symbol):
+        """Fetch open interest data and merge it with the existing dataframe."""
+        try:
+            df_oi = self.get_open_interest(symbol)
+            if not df_oi.empty:
+                df = df.join(df_oi.reindex(df.index, method='ffill'))
+            return df
+        except Exception as e:
+            logging.error(f"Error in fetch_and_merge_open_interest: {str(e)}")
+            return df
+
+    def get_available_futures_pairs(self):
+        """Get a list of available futures pairs (USDT perpetuals)."""
+        try:
+            response = self.client.get_tickers(
+                category="linear"
+            )
+            
+            if 'retCode' in response and response['retCode'] != 0:
+                logging.error(f"API Error in get_available_futures_pairs: {response.get('retMsg', 'Unknown error')}")
+                return []
+            
+            if not response.get('result', {}).get('list'):
+                logging.error("No futures ticker data returned")
+                return []
+            
+            # Extract all available futures symbols
+            pairs = [item['symbol'] for item in response['result']['list'] if item['category'] == 'linear']
+            pairs.sort()  # Sort alphabetically
+            logging.info(f"Found {len(pairs)} available futures trading pairs")
+            return pairs
+            
+        except Exception as e:
+            logging.error(f"Error in get_available_futures_pairs: {str(e)}")
+            return [] 

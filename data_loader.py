@@ -7,7 +7,7 @@ from ta.trend import SMAIndicator, MACD, EMAIndicator
 from ta.momentum import RSIIndicator, StochasticOscillator, WilliamsRIndicator
 from ta.volatility import BollingerBands, AverageTrueRange
 from ta.volume import OnBalanceVolumeIndicator, VolumePriceTrendIndicator, ChaikinMoneyFlowIndicator
-from sklearn.preprocessing import MinMaxScaler
+from sklearn.preprocessing import MinMaxScaler, RobustScaler
 from dotenv import load_dotenv
 import logging
 
@@ -48,7 +48,8 @@ class DataLoader:
             logging.error(f"Failed to initialize Bybit client: {str(e)}")
             raise
             
-        self.scaler = MinMaxScaler()
+        self.scaler = RobustScaler()
+        self.min_max_scaler = MinMaxScaler()
         
     def fetch_historical_data(self, symbol, interval='60', lookback_days=180):
         """Fetch historical OHLCV data from Bybit.
@@ -230,30 +231,21 @@ class DataLoader:
             # Kijun-sen (Base Line): (26-period high + 26-period low) / 2
             df['kijun_sen'] = (df['high'].rolling(window=26).max() + df['low'].rolling(window=26).min()) / 2
             
-            # Senkou Span A (Leading Span A): (Tenkan-sen + Kijun-sen) / 2, shifted 26 periods ahead
-            df['senkou_span_a'] = ((df['tenkan_sen'] + df['kijun_sen']) / 2).shift(26)
+            # Senkou Span A (Leading Span A): (Tenkan-sen + Kijun-sen) / 2, plotted 26 periods ahead
+            senkou_span_a = ((df['tenkan_sen'] + df['kijun_sen']) / 2).shift(26)
             
-            # Senkou Span B (Leading Span B): (52-period high + 52-period low) / 2, shifted 26 periods ahead
-            df['senkou_span_b'] = ((df['high'].rolling(window=52).max() + df['low'].rolling(window=52).min()) / 2).shift(26)
+            # Senkou Span B (Leading Span B): (52-period high + 52-period low) / 2, plotted 26 periods ahead
+            senkou_span_b = ((df['high'].rolling(window=52).max() + df['low'].rolling(window=52).min()) / 2).shift(26)
             
-            # Chikou Span (Lagging Span): Close price shifted 26 periods back
-            df['chikou_span'] = df['close'].shift(-26)
+            # Price vs. Cloud
+            df['price_vs_cloud'] = np.where(df['close'] > senkou_span_a, 1, np.where(df['close'] < senkou_span_b, -1, 0))
             
-            # Cloud boundaries (for easier analysis)
-            df['cloud_top'] = df[['senkou_span_a', 'senkou_span_b']].max(axis=1)
-            df['cloud_bottom'] = df[['senkou_span_a', 'senkou_span_b']].min(axis=1)
-            
-            # Cloud color determination (bullish when Span A > Span B)
-            df['cloud_color'] = np.where(df['senkou_span_a'] > df['senkou_span_b'], 1, -1)  # 1 = bullish, -1 = bearish
-            
-            # Price position relative to cloud
-            df['price_vs_cloud'] = np.where(df['close'] > df['cloud_top'], 1,  # Above cloud
-                                          np.where(df['close'] < df['cloud_bottom'], -1, 0))  # Below cloud / In cloud
-            
-            logging.info("Successfully added comprehensive technical indicators including Ichimoku Cloud")
+            # Remove rows with NaN values after adding indicators
+            df.dropna(inplace=True)
+            logging.info(f"Technical indicators added, dataframe shape: {df.shape}")
             return df
         except Exception as e:
-            logging.error(f"Error in add_technical_indicators: {str(e)}")
+            logging.error(f"Error adding technical indicators: {str(e)}")
             return df
 
     def prepare_data(self, df, sequence_length=24, n_future_steps=1, train_split=0.8):
@@ -316,7 +308,6 @@ class DataLoader:
 
     def inverse_transform_price(self, scaled_prices):
         """Convert scaled prices back to original scale."""
-        # Create a dummy array with the same shape as the scaler expects
         if scaled_prices.ndim == 1:
             scaled_prices = scaled_prices.reshape(-1, 1)
         
@@ -328,7 +319,7 @@ class DataLoader:
         return self.scaler.inverse_transform(dummy_features)[:, 0]
 
     def get_latest_price(self, symbol):
-        """Get the latest price for a symbol."""
+        """Get the latest price for a given symbol."""
         try:
             response = self.client.get_tickers(
                 category="spot",
