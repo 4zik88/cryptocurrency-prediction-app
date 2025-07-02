@@ -9,6 +9,14 @@ from sklearn.preprocessing import StandardScaler
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
+# Import TA-Lib for candlestick pattern recognition
+try:
+    import talib
+    TALIB_AVAILABLE = True
+except ImportError:
+    TALIB_AVAILABLE = False
+    logging.warning("TA-Lib not available. Candlestick pattern recognition will be disabled.")
+
 # Configure logging
 logging.basicConfig(level=logging.INFO,
                    format='%(asctime)s - %(levelname)s - %(message)s')
@@ -240,6 +248,336 @@ class TradingPatternAnalyzer:
             logging.error(f"Error in analyze_intraday_patterns: {str(e)}")
             return {}
     
+    def detect_candlestick_patterns(self, df: pd.DataFrame) -> Dict:
+        """
+        Detect candlestick patterns using TA-Lib library.
+        Returns a comprehensive analysis of all detected patterns.
+        """
+        if not TALIB_AVAILABLE:
+            logging.warning("TA-Lib not available. Candlestick pattern detection skipped.")
+            return {}
+        
+        try:
+            # Ensure we have the required OHLCV data
+            required_columns = ['open', 'high', 'low', 'close', 'volume']
+            if not all(col in df.columns for col in required_columns):
+                logging.error("Missing required columns for candlestick pattern detection")
+                return {}
+            
+            # Validate data quality
+            if len(df) < 10:
+                logging.warning(f"Insufficient data for pattern detection: {len(df)} candles")
+                return {}
+            
+            # Clean and validate data
+            df_clean = df.dropna(subset=required_columns)
+            if len(df_clean) < len(df) * 0.8:  # If we lose more than 20% of data
+                logging.warning(f"Too many NaN values in data: {len(df) - len(df_clean)} out of {len(df)}")
+            
+            # Use cleaned data
+            df = df_clean
+            
+            # Extract OHLC data and ensure proper types
+            open_prices = df['open'].astype(float).values
+            high_prices = df['high'].astype(float).values
+            low_prices = df['low'].astype(float).values
+            close_prices = df['close'].astype(float).values
+            
+            # Validate OHLC logic
+            invalid_candles = (
+                (high_prices < low_prices) | 
+                (high_prices < open_prices) | 
+                (high_prices < close_prices) |
+                (low_prices > open_prices) |
+                (low_prices > close_prices)
+            )
+            
+            if np.any(invalid_candles):
+                logging.warning(f"Found {np.sum(invalid_candles)} invalid OHLC candles - this may affect pattern detection")
+            
+            logging.info(f"Starting pattern detection on {len(df)} candles with price range ${low_prices.min():.2f} - ${high_prices.max():.2f}")
+            
+            # Define all available candlestick patterns with their categories
+            patterns_config = {
+                # Reversal Patterns (Bullish)
+                'CDL2CROWS': {'name': 'Two Crows', 'type': 'bearish_reversal'},
+                'CDL3BLACKCROWS': {'name': 'Three Black Crows', 'type': 'bearish_reversal'},
+                'CDL3INSIDE': {'name': 'Three Inside Up/Down', 'type': 'reversal'},
+                'CDL3LINESTRIKE': {'name': 'Three-Line Strike', 'type': 'reversal'},
+                'CDL3OUTSIDE': {'name': 'Three Outside Up/Down', 'type': 'reversal'},
+                'CDL3STARSINSOUTH': {'name': 'Three Stars In The South', 'type': 'bullish_reversal'},
+                'CDL3WHITESOLDIERS': {'name': 'Three Advancing White Soldiers', 'type': 'bullish_reversal'},
+                'CDLABANDONEDBABY': {'name': 'Abandoned Baby', 'type': 'reversal'},
+                'CDLADVANCEBLOCK': {'name': 'Advance Block', 'type': 'bearish_reversal'},
+                'CDLBELTHOLD': {'name': 'Belt-hold', 'type': 'reversal'},
+                'CDLBREAKAWAY': {'name': 'Breakaway', 'type': 'reversal'},
+                'CDLCLOSINGMARUBOZU': {'name': 'Closing Marubozu', 'type': 'continuation'},
+                'CDLCONCEALBABYSWALL': {'name': 'Concealing Baby Swallow', 'type': 'bullish_reversal'},
+                'CDLCOUNTERATTACK': {'name': 'Counterattack', 'type': 'reversal'},
+                'CDLDARKCLOUDCOVER': {'name': 'Dark Cloud Cover', 'type': 'bearish_reversal'},
+                'CDLDOJI': {'name': 'Doji', 'type': 'indecision'},
+                'CDLDOJISTAR': {'name': 'Doji Star', 'type': 'reversal'},
+                'CDLDRAGONFLYDOJI': {'name': 'Dragonfly Doji', 'type': 'bullish_reversal'},
+                'CDLENGULFING': {'name': 'Engulfing Pattern', 'type': 'reversal'},
+                'CDLEVENINGDOJISTAR': {'name': 'Evening Doji Star', 'type': 'bearish_reversal'},
+                'CDLEVENINGSTAR': {'name': 'Evening Star', 'type': 'bearish_reversal'},
+                'CDLGAPSIDESIDEWHITE': {'name': 'Up/Down-gap side-by-side white lines', 'type': 'continuation'},
+                'CDLGRAVESTONEDOJI': {'name': 'Gravestone Doji', 'type': 'bearish_reversal'},
+                'CDLHAMMER': {'name': 'Hammer', 'type': 'bullish_reversal'},
+                'CDLHANGINGMAN': {'name': 'Hanging Man', 'type': 'bearish_reversal'},
+                'CDLHARAMI': {'name': 'Harami Pattern', 'type': 'reversal'},
+                'CDLHARAMICROSS': {'name': 'Harami Cross Pattern', 'type': 'reversal'},
+                'CDLHIGHWAVE': {'name': 'High-Wave Candle', 'type': 'indecision'},
+                'CDLHIKKAKE': {'name': 'Hikkake Pattern', 'type': 'reversal'},
+                'CDLHIKKAKEMOD': {'name': 'Modified Hikkake Pattern', 'type': 'reversal'},
+                'CDLHOMINGPIGEON': {'name': 'Homing Pigeon', 'type': 'bullish_reversal'},
+                'CDLIDENTICAL3CROWS': {'name': 'Identical Three Crows', 'type': 'bearish_reversal'},
+                'CDLINNECK': {'name': 'In-Neck Pattern', 'type': 'bearish_continuation'},
+                'CDLINVERTEDHAMMER': {'name': 'Inverted Hammer', 'type': 'bullish_reversal'},
+                'CDLKICKING': {'name': 'Kicking', 'type': 'reversal'},
+                'CDLKICKINGBYLENGTH': {'name': 'Kicking - bull/bear determined by the longer marubozu', 'type': 'reversal'},
+                'CDLLADDERBOTTOM': {'name': 'Ladder Bottom', 'type': 'bullish_reversal'},
+                'CDLLONGLEGGEDDOJI': {'name': 'Long Legged Doji', 'type': 'indecision'},
+                'CDLLONGLINE': {'name': 'Long Line Candle', 'type': 'continuation'},
+                'CDLMARUBOZU': {'name': 'Marubozu', 'type': 'continuation'},
+                'CDLMATCHINGLOW': {'name': 'Matching Low', 'type': 'bullish_reversal'},
+                'CDLMATHOLD': {'name': 'Mat Hold', 'type': 'bullish_continuation'},
+                'CDLMORNINGDOJISTAR': {'name': 'Morning Doji Star', 'type': 'bullish_reversal'},
+                'CDLMORNINGSTAR': {'name': 'Morning Star', 'type': 'bullish_reversal'},
+                'CDLONNECK': {'name': 'On-Neck Pattern', 'type': 'bearish_continuation'},
+                'CDLPIERCING': {'name': 'Piercing Pattern', 'type': 'bullish_reversal'},
+                'CDLRICKSHAWMAN': {'name': 'Rickshaw Man', 'type': 'indecision'},
+                'CDLRISEFALL3METHODS': {'name': 'Rising/Falling Three Methods', 'type': 'continuation'},
+                'CDLSEPARATINGLINES': {'name': 'Separating Lines', 'type': 'continuation'},
+                'CDLSHOOTINGSTAR': {'name': 'Shooting Star', 'type': 'bearish_reversal'},
+                'CDLSHORTLINE': {'name': 'Short Line Candle', 'type': 'indecision'},
+                'CDLSPINNINGTOP': {'name': 'Spinning Top', 'type': 'indecision'},
+                'CDLSTALLEDPATTERN': {'name': 'Stalled Pattern', 'type': 'bearish_reversal'},
+                'CDLSTICKSANDWICH': {'name': 'Stick Sandwich', 'type': 'bullish_reversal'},
+                'CDLTAKURI': {'name': 'Takuri (Dragonfly Doji with very long lower shadow)', 'type': 'bullish_reversal'},
+                'CDLTASUKIGAP': {'name': 'Tasuki Gap', 'type': 'continuation'},
+                'CDLTHRUSTING': {'name': 'Thrusting Pattern', 'type': 'bearish_continuation'},
+                'CDLTRISTAR': {'name': 'Tristar Pattern', 'type': 'reversal'},
+                'CDLUNIQUE3RIVER': {'name': 'Unique 3 River', 'type': 'bullish_reversal'},
+                'CDLUPSIDEGAP2CROWS': {'name': 'Upside Gap Two Crows', 'type': 'bearish_reversal'},
+                'CDLXSIDEGAP3METHODS': {'name': 'Upside/Downside Gap Three Methods', 'type': 'continuation'},
+            }
+            
+            # Detect all patterns
+            detected_patterns = {}
+            pattern_summary = {
+                'bullish_reversal': [],
+                'bearish_reversal': [],
+                'continuation': [],
+                'indecision': [],
+                'reversal': []
+            }
+            
+            for pattern_func, config in patterns_config.items():
+                try:
+                    # Get the TA-Lib function
+                    talib_func = getattr(talib, pattern_func)
+                    
+                    # Apply the pattern detection
+                    if pattern_func in ['CDLMORNINGSTAR', 'CDLEVENINGSTAR']:
+                        # These functions require a penetration parameter
+                        pattern_result = talib_func(open_prices, high_prices, low_prices, close_prices, penetration=0.3)
+                    else:
+                        pattern_result = talib_func(open_prices, high_prices, low_prices, close_prices)
+                    
+                    # Store non-zero results
+                    pattern_signals = pattern_result[pattern_result != 0]
+                    if len(pattern_signals) > 0:
+                        detected_patterns[pattern_func] = {
+                            'name': config['name'],
+                            'type': config['type'],
+                            'signals': pattern_result,
+                            'count': len(pattern_signals),
+                            'bullish_signals': len(pattern_signals[pattern_signals > 0]),
+                            'bearish_signals': len(pattern_signals[pattern_signals < 0]),
+                            'signal_indices': np.where(pattern_result != 0)[0],
+                            'signal_values': pattern_signals
+                        }
+                        
+                        # Add to summary
+                        pattern_summary[config['type']].append({
+                            'pattern': pattern_func,
+                            'name': config['name'],
+                            'count': len(pattern_signals),
+                            'latest_signal': pattern_signals[-1] if len(pattern_signals) > 0 else 0,
+                            'latest_index': np.where(pattern_result != 0)[0][-1] if len(pattern_signals) > 0 else -1
+                        })
+                
+                except Exception as e:
+                    logging.warning(f"Error detecting pattern {pattern_func}: {str(e)}")
+                    continue
+            
+            # Calculate pattern statistics
+            total_patterns = len(detected_patterns)
+            total_signals = sum(p['count'] for p in detected_patterns.values())
+            
+            # Create all patterns list (not just recent)
+            all_patterns = []
+            for pattern_key, pattern_data in detected_patterns.items():
+                for idx in pattern_data['signal_indices']:
+                    all_patterns.append({
+                        'pattern': pattern_key,
+                        'name': pattern_data['name'],
+                        'type': pattern_data['type'],
+                        'index': idx,
+                        'timestamp': df.index[idx],
+                        'signal_strength': pattern_data['signals'][idx],
+                        'price': df.iloc[idx]['close']
+                    })
+            
+            # Sort all patterns by recency
+            all_patterns.sort(key=lambda x: x['index'], reverse=True)
+            
+            # Find patterns in different time windows
+            recent_windows = {
+                'last_10': min(10, len(df)),
+                'last_20': min(20, len(df)),
+                'last_50': min(50, len(df)),
+                'last_100': min(100, len(df))
+            }
+            
+            recent_patterns_by_window = {}
+            for window_name, window_size in recent_windows.items():
+                patterns_in_window = [p for p in all_patterns if p['index'] >= (len(df) - window_size)]
+                recent_patterns_by_window[window_name] = patterns_in_window
+            
+            # Use the most appropriate window (prefer larger windows if they have patterns)
+            recent_patterns = []
+            for window_name in ['last_100', 'last_50', 'last_20', 'last_10']:
+                if recent_patterns_by_window[window_name]:
+                    recent_patterns = recent_patterns_by_window[window_name]
+                    logging.info(f"Found {len(recent_patterns)} patterns in {window_name} candles")
+                    break
+            
+            # If no patterns found in any recent window, take the most recent patterns overall
+            if not recent_patterns and all_patterns:
+                recent_patterns = all_patterns[:10]  # Most recent 10 patterns from entire dataset
+                logging.info(f"No recent patterns found, showing {len(recent_patterns)} most recent from entire dataset")
+            
+            # Add detailed debugging statistics
+            window_stats = {}
+            for window_name, patterns in recent_patterns_by_window.items():
+                window_stats[window_name] = len(patterns)
+            
+            analysis_result = {
+                'detected_patterns': detected_patterns,
+                'pattern_summary': pattern_summary,
+                'statistics': {
+                    'total_patterns_detected': total_patterns,
+                    'total_signals': total_signals,
+                    'recent_patterns_count': len(recent_patterns),
+                    'pattern_frequency': total_signals / len(df) * 100 if len(df) > 0 else 0,
+                    'data_length': len(df),
+                    'window_stats': window_stats,
+                    'all_patterns_count': len(all_patterns)
+                },
+                'recent_patterns': recent_patterns[:10],  # Last 10 patterns
+                'all_patterns': all_patterns[:20],  # Most recent 20 patterns from entire dataset
+                'market_sentiment': self._analyze_pattern_sentiment(detected_patterns),
+                'debug_info': {
+                    'patterns_by_type': {
+                        pattern_type: len(patterns) for pattern_type, patterns in pattern_summary.items()
+                    },
+                    'most_common_patterns': sorted(
+                        [(name, data['count']) for name, data in detected_patterns.items()],
+                        key=lambda x: x[1], reverse=True
+                    )[:10]
+                }
+            }
+            
+            # Enhanced logging
+            if total_patterns > 0:
+                logging.info(f"✅ Detected {total_patterns} different candlestick patterns with {total_signals} total signals")
+                logging.info(f"📊 Window breakdown: {window_stats}")
+                most_common = analysis_result['debug_info']['most_common_patterns'][:3]
+                if most_common:
+                    logging.info(f"🔥 Top patterns: {', '.join([f'{name}({count})' for name, count in most_common])}")
+            else:
+                logging.info("❌ No candlestick patterns detected in the dataset")
+                
+            return analysis_result
+            
+        except Exception as e:
+            logging.error(f"Error in detect_candlestick_patterns: {str(e)}")
+            return {}
+    
+    def _analyze_pattern_sentiment(self, detected_patterns: Dict) -> Dict:
+        """Analyze overall market sentiment based on detected patterns."""
+        try:
+            bullish_score = 0
+            bearish_score = 0
+            indecision_score = 0
+            
+            # Weight recent patterns more heavily
+            for pattern_key, pattern_data in detected_patterns.items():
+                pattern_type = pattern_data['type']
+                recent_signals = pattern_data['signal_values'][-5:]  # Last 5 signals
+                
+                for signal in recent_signals:
+                    if 'bullish' in pattern_type:
+                        bullish_score += abs(signal)
+                    elif 'bearish' in pattern_type:
+                        bearish_score += abs(signal)
+                    elif 'indecision' in pattern_type or 'doji' in pattern_data['name'].lower():
+                        indecision_score += abs(signal)
+                    elif pattern_type == 'reversal':
+                        # Reversal patterns - add to bullish if signal is positive, bearish if negative
+                        if signal > 0:
+                            bullish_score += abs(signal)
+                        else:
+                            bearish_score += abs(signal)
+            
+            total_score = bullish_score + bearish_score + indecision_score
+            
+            if total_score == 0:
+                return {
+                    'sentiment': 'neutral',
+                    'confidence': 0,
+                    'bullish_ratio': 0,
+                    'bearish_ratio': 0,
+                    'indecision_ratio': 0
+                }
+            
+            bullish_ratio = bullish_score / total_score
+            bearish_ratio = bearish_score / total_score
+            indecision_ratio = indecision_score / total_score
+            
+            # Determine overall sentiment
+            if bullish_ratio > 0.6:
+                sentiment = 'bullish'
+                confidence = bullish_ratio
+            elif bearish_ratio > 0.6:
+                sentiment = 'bearish'
+                confidence = bearish_ratio
+            elif indecision_ratio > 0.5:
+                sentiment = 'indecision'
+                confidence = indecision_ratio
+            else:
+                sentiment = 'mixed'
+                confidence = max(bullish_ratio, bearish_ratio, indecision_ratio)
+            
+            return {
+                'sentiment': sentiment,
+                'confidence': confidence,
+                'bullish_ratio': bullish_ratio,
+                'bearish_ratio': bearish_ratio,
+                'indecision_ratio': indecision_ratio,
+                'scores': {
+                    'bullish': bullish_score,
+                    'bearish': bearish_score,
+                    'indecision': indecision_score
+                }
+            }
+            
+        except Exception as e:
+            logging.error(f"Error in _analyze_pattern_sentiment: {str(e)}")
+            return {'sentiment': 'neutral', 'confidence': 0}
+
     def calculate_market_microstructure_features(self, df: pd.DataFrame) -> Dict:
         """
         Calculate advanced market microstructure features for better prediction accuracy.
@@ -288,7 +626,8 @@ class TradingPatternAnalyzer:
     def create_enhanced_trading_chart(self, df: pd.DataFrame, 
                                     jump_analysis: Dict,
                                     sr_analysis: Dict,
-                                    symbol: str) -> go.Figure:
+                                    symbol: str,
+                                    candlestick_analysis: Dict = None) -> go.Figure:
         """
         Create an enhanced trading chart with price jumps, support/resistance levels,
         and trading patterns.
@@ -355,6 +694,70 @@ class TradingPatternAnalyzer:
                     ),
                     row=1, col=1
                 )
+            
+            # Add candlestick pattern markers
+            if candlestick_analysis and 'recent_patterns' in candlestick_analysis:
+                # Define colors and symbols for different pattern types
+                pattern_colors = {
+                    'bullish_reversal': '#00FF00',      # Bright green
+                    'bearish_reversal': '#FF0000',      # Bright red
+                    'bullish_continuation': '#90EE90',   # Light green
+                    'bearish_continuation': '#FFB6C1',   # Light pink
+                    'continuation': '#FFA500',           # Orange
+                    'indecision': '#FFFF00',            # Yellow
+                    'reversal': '#9932CC'               # Purple
+                }
+                
+                pattern_symbols = {
+                    'bullish_reversal': 'triangle-up',
+                    'bearish_reversal': 'triangle-down',
+                    'bullish_continuation': 'arrow-up',
+                    'bearish_continuation': 'arrow-down',
+                    'continuation': 'diamond',
+                    'indecision': 'circle',
+                    'reversal': 'star'
+                }
+                
+                # Group patterns by type for better visualization
+                pattern_groups = {}
+                for pattern in candlestick_analysis['recent_patterns']:
+                    pattern_type = pattern['type']
+                    if pattern_type not in pattern_groups:
+                        pattern_groups[pattern_type] = []
+                    pattern_groups[pattern_type].append(pattern)
+                
+                # Add markers for each pattern type
+                for pattern_type, patterns in pattern_groups.items():
+                    if patterns:
+                        x_values = [df.index[p['index']] for p in patterns]
+                        y_values = [p['price'] for p in patterns]
+                        pattern_names = [p['name'] for p in patterns]
+                        
+                        # Create hover text with pattern details
+                        hover_text = [
+                            f"{p['name']}<br>Type: {p['type']}<br>Signal: {p['signal_strength']}<br>Price: ${p['price']:,.2f}"
+                            for p in patterns
+                        ]
+                        
+                        fig.add_trace(
+                            go.Scatter(
+                                x=x_values,
+                                y=y_values,
+                                mode='markers',
+                                marker=dict(
+                                    color=pattern_colors.get(pattern_type, '#FFFFFF'),
+                                    size=12,
+                                    symbol=pattern_symbols.get(pattern_type, 'circle'),
+                                    line=dict(width=1, color='black')
+                                ),
+                                name=f'{pattern_type.replace("_", " ").title()} Patterns',
+                                text=pattern_names,
+                                hovertext=hover_text,
+                                hoverinfo='text',
+                                showlegend=True
+                            ),
+                            row=1, col=1
+                        )
             
             # Volume profile
             fig.add_trace(

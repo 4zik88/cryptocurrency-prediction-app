@@ -238,6 +238,14 @@ threshold = st.sidebar.slider(
 )
 st.session_state.threshold = threshold
 
+# Candlestick Pattern Analysis Toggle
+enable_candlestick_patterns = st.sidebar.checkbox(
+    "🕯️ Enable Candlestick Pattern Analysis",
+    value=st.session_state.get('enable_candlestick_patterns', True),
+    help="Enable AI-powered candlestick pattern recognition and analysis"
+)
+st.session_state.enable_candlestick_patterns = enable_candlestick_patterns
+
 # Add a reset button
 st.sidebar.button(get_text("reset_filters", current_lang), on_click=reset_filters, use_container_width=True)
 
@@ -1129,6 +1137,341 @@ try:
             
             # Additional insights
             st.caption("💡 Ichimoku Cloud provides comprehensive trend analysis combining momentum, support/resistance, and future trend projection.")
+    
+    # --- Candlestick Pattern Analysis ---
+    if enable_candlestick_patterns and get_trading_pattern_analyzer():
+        st.header("🕯️ Candlestick Pattern Analysis")
+        
+        with st.spinner("Analyzing candlestick patterns..."):
+            try:
+                pattern_analyzer = get_trading_pattern_analyzer()
+                
+                # Perform comprehensive pattern analysis
+                candlestick_analysis = pattern_analyzer.detect_candlestick_patterns(df)
+                jump_analysis = pattern_analyzer.detect_price_jumps(df, jump_threshold=threshold)
+                sr_analysis = pattern_analyzer.identify_support_resistance_levels(df)
+                
+                # Always show analysis if TA-Lib detection ran
+                if candlestick_analysis:
+                    # Display pattern statistics
+                    stats = candlestick_analysis['statistics']
+                    sentiment = candlestick_analysis.get('market_sentiment', {})
+                    
+                    # Key metrics
+                    col1, col2, col3, col4 = st.columns(4)
+                    
+                    with col1:
+                        st.metric(
+                            "🔍 Patterns Detected", 
+                            stats['total_patterns_detected'],
+                            delta=f"{stats['pattern_frequency']:.1f}% frequency"
+                        )
+                    
+                    with col2:
+                        st.metric(
+                            "📊 Total Signals", 
+                            stats['total_signals'],
+                            delta=f"from {stats.get('data_length', 0)} candles"
+                        )
+                    
+                    with col3:
+                        sentiment_emoji = {
+                            'bullish': '🟢', 'bearish': '🔴', 
+                            'mixed': '🟡', 'indecision': '⚪', 'neutral': '⚫'
+                        }.get(sentiment.get('sentiment', 'neutral'), '⚫')
+                        st.metric(
+                            "🎭 Market Sentiment", 
+                            f"{sentiment_emoji} {sentiment.get('sentiment', 'neutral').title()}",
+                            delta=f"{sentiment.get('confidence', 0):.1%} confidence"
+                        )
+                    
+                    with col4:
+                        st.metric(
+                            "⏰ Recent Patterns", 
+                            stats.get('recent_patterns_count', 0),
+                            delta=f"of {stats.get('all_patterns_count', 0)} total"
+                        )
+                    
+                    # Show debug information for patterns
+                    if stats.get('total_patterns_detected', 0) > 0:
+                        debug_info = candlestick_analysis.get('debug_info', {})
+                        
+                        # Show window breakdown
+                        if stats.get('window_stats'):
+                            st.info(f"**Pattern Distribution by Time Window:**")
+                            window_stats = stats['window_stats']
+                            window_text = []
+                            for window, count in window_stats.items():
+                                if count > 0:
+                                    window_text.append(f"{window.replace('_', ' ')}: {count}")
+                            if window_text:
+                                st.caption(f"📊 {', '.join(window_text)}")
+                        
+                        # Show most common patterns
+                        if debug_info.get('most_common_patterns'):
+                            top_patterns = debug_info['most_common_patterns'][:5]
+                            pattern_text = [f"{name} ({count})" for name, count in top_patterns]
+                            st.success(f"**🔥 Most Common Patterns:** {', '.join(pattern_text)}")
+                    
+                    else:
+                        # Show why no patterns were detected
+                        st.warning("**🔍 Pattern Detection Analysis:**")
+                        st.caption(f"• Analyzed {stats.get('data_length', 0)} candles")
+                        st.caption("• This could indicate:")
+                        st.caption("  - Strong trending market without reversal signals")
+                        st.caption("  - Insufficient price volatility for pattern formation")
+                        st.caption("  - Very recent data (patterns need time to develop)")
+                        st.caption("  - Market in consolidation phase")
+                    
+                    # Pattern display section
+                    patterns_to_show = candlestick_analysis.get('recent_patterns', [])
+                    all_patterns = candlestick_analysis.get('all_patterns', [])
+                    
+                    if patterns_to_show:
+                        st.subheader("🔥 Most Recent Patterns")
+                        
+                        recent_patterns_df = pd.DataFrame([
+                            {
+                                'Pattern': pattern['name'],
+                                'Type': pattern['type'].replace('_', ' ').title(),
+                                'Signal': '🟢 Bullish' if pattern['signal_strength'] > 0 else '🔴 Bearish',
+                                'Strength': abs(pattern['signal_strength']),
+                                'Time': pattern['timestamp'].strftime('%Y-%m-%d %H:%M') if hasattr(pattern['timestamp'], 'strftime') else str(pattern['timestamp']),
+                                'Price': f"${pattern['price']:,.4f}"
+                            }
+                            for pattern in patterns_to_show[:10]
+                        ])
+                        
+                        st.dataframe(recent_patterns_df, use_container_width=True)
+                        
+                        # Show option to see all patterns if there are more
+                        if len(all_patterns) > len(patterns_to_show):
+                            with st.expander(f"📊 See All {len(all_patterns)} Detected Patterns"):
+                                all_patterns_df = pd.DataFrame([
+                                    {
+                                        'Pattern': pattern['name'],
+                                        'Type': pattern['type'].replace('_', ' ').title(),
+                                        'Signal': '🟢 Bullish' if pattern['signal_strength'] > 0 else '🔴 Bearish',
+                                        'Strength': abs(pattern['signal_strength']),
+                                        'Time': pattern['timestamp'].strftime('%Y-%m-%d %H:%M') if hasattr(pattern['timestamp'], 'strftime') else str(pattern['timestamp']),
+                                        'Price': f"${pattern['price']:,.4f}"
+                                    }
+                                    for pattern in all_patterns
+                                ])
+                                
+                                st.dataframe(all_patterns_df, use_container_width=True)
+                                st.caption("💡 These patterns span the entire analyzed timeframe")
+                    
+                    elif all_patterns:
+                        st.subheader("📊 Historical Patterns Detected")
+                        st.info("No patterns found in recent timeframes, but patterns were detected in the historical data:")
+                        
+                        historical_patterns_df = pd.DataFrame([
+                            {
+                                'Pattern': pattern['name'],
+                                'Type': pattern['type'].replace('_', ' ').title(),
+                                'Signal': '🟢 Bullish' if pattern['signal_strength'] > 0 else '🔴 Bearish',
+                                'Strength': abs(pattern['signal_strength']),
+                                'Time': pattern['timestamp'].strftime('%Y-%m-%d %H:%M') if hasattr(pattern['timestamp'], 'strftime') else str(pattern['timestamp']),
+                                'Price': f"${pattern['price']:,.4f}"
+                            }
+                            for pattern in all_patterns[:15]  # Show top 15 historical patterns
+                        ])
+                        
+                        st.dataframe(historical_patterns_df, use_container_width=True)
+                        st.caption("💡 These patterns occurred earlier in the analyzed timeframe")
+                    
+                    # Pattern categories breakdown
+                    pattern_summary = candlestick_analysis.get('pattern_summary', {})
+                    if any(pattern_summary.values()):
+                        st.subheader("📋 Pattern Categories")
+                        
+                        tab1, tab2, tab3, tab4, tab5 = st.tabs([
+                            "🟢 Bullish Reversal", "🔴 Bearish Reversal", 
+                            "➡️ Continuation", "⚪ Indecision", "🔄 General Reversal"
+                        ])
+                        
+                        with tab1:
+                            if pattern_summary.get('bullish_reversal'):
+                                bullish_df = pd.DataFrame([
+                                    {
+                                        'Pattern': p['name'],
+                                        'Count': p['count'],
+                                        'Latest Signal': '🟢 Strong' if p['latest_signal'] >= 100 else '🟡 Weak'
+                                    }
+                                    for p in pattern_summary['bullish_reversal']
+                                ])
+                                st.dataframe(bullish_df, use_container_width=True)
+                                st.success("💡 These patterns suggest potential upward price reversals")
+                            else:
+                                st.info("No bullish reversal patterns detected recently")
+                        
+                        with tab2:
+                            if pattern_summary.get('bearish_reversal'):
+                                bearish_df = pd.DataFrame([
+                                    {
+                                        'Pattern': p['name'],
+                                        'Count': p['count'],
+                                        'Latest Signal': '🔴 Strong' if abs(p['latest_signal']) >= 100 else '🟡 Weak'
+                                    }
+                                    for p in pattern_summary['bearish_reversal']
+                                ])
+                                st.dataframe(bearish_df, use_container_width=True)
+                                st.warning("⚠️ These patterns suggest potential downward price reversals")
+                            else:
+                                st.info("No bearish reversal patterns detected recently")
+                        
+                        with tab3:
+                            if pattern_summary.get('continuation'):
+                                continuation_df = pd.DataFrame([
+                                    {
+                                        'Pattern': p['name'],
+                                        'Count': p['count'],
+                                        'Latest Signal': 'Strong' if abs(p['latest_signal']) >= 100 else 'Weak'
+                                    }
+                                    for p in pattern_summary['continuation']
+                                ])
+                                st.dataframe(continuation_df, use_container_width=True)
+                                st.info("➡️ These patterns suggest trend continuation")
+                            else:
+                                st.info("No continuation patterns detected recently")
+                        
+                        with tab4:
+                            if pattern_summary.get('indecision'):
+                                indecision_df = pd.DataFrame([
+                                    {
+                                        'Pattern': p['name'],
+                                        'Count': p['count'],
+                                        'Latest Signal': 'Present' if p['latest_signal'] != 0 else 'Absent'
+                                    }
+                                    for p in pattern_summary['indecision']
+                                ])
+                                st.dataframe(indecision_df, use_container_width=True)
+                                st.warning("⚪ These patterns suggest market indecision - wait for confirmation")
+                            else:
+                                st.info("No indecision patterns detected recently")
+                        
+                        with tab5:
+                            if pattern_summary.get('reversal'):
+                                reversal_df = pd.DataFrame([
+                                    {
+                                        'Pattern': p['name'],
+                                        'Count': p['count'],
+                                        'Latest Signal': '🟢 Bullish' if p['latest_signal'] > 0 else '🔴 Bearish' if p['latest_signal'] < 0 else 'Neutral'
+                                    }
+                                    for p in pattern_summary['reversal']
+                                ])
+                                st.dataframe(reversal_df, use_container_width=True)
+                                st.info("🔄 These are general reversal patterns - direction depends on signal value")
+                            else:
+                                st.info("No general reversal patterns detected recently")
+                    
+                    # Enhanced trading chart with patterns
+                    st.subheader("📊 Enhanced Pattern Analysis Chart")
+                    enhanced_chart = pattern_analyzer.create_enhanced_trading_chart(
+                        df, jump_analysis, sr_analysis, symbol, candlestick_analysis
+                    )
+                    st.plotly_chart(enhanced_chart, use_container_width=True)
+                    
+                    # Trading insights based on patterns
+                    intraday_analysis = pattern_analyzer.analyze_intraday_patterns(df)
+                    microstructure_features = pattern_analyzer.calculate_market_microstructure_features(df)
+                    insights = pattern_analyzer.generate_trading_insights(
+                        df, jump_analysis, sr_analysis, intraday_analysis, microstructure_features
+                    )
+                    
+                    if insights:
+                        st.subheader("💡 AI Trading Insights")
+                        
+                        # Market summary
+                        if insights.get('market_summary'):
+                            summary = insights['market_summary']
+                            col1, col2 = st.columns(2)
+                            
+                            with col1:
+                                st.info(f"**Current Trend**: {summary.get('trend', 'Unknown').title()}")
+                                st.info(f"**Volatility**: {summary.get('volatility_level', 'Unknown').title()}")
+                                st.info(f"**Volume**: {summary.get('volume_level', 'Unknown').title()}")
+                            
+                            with col2:
+                                st.info(f"**Jump Frequency**: {summary.get('jump_frequency', 0):.1f}%")
+                                st.info(f"**Market Efficiency**: {summary.get('market_efficiency', 0.5):.1%}")
+                        
+                        # Trading opportunities
+                        if insights.get('trading_opportunities'):
+                            st.success("**📈 Trading Opportunities:**")
+                            for opp in insights['trading_opportunities']:
+                                confidence_emoji = {'high': '🔥', 'medium': '⚡', 'low': '💫'}.get(opp.get('confidence', 'medium'), '⚡')
+                                st.success(f"{confidence_emoji} {opp['signal']} ({opp.get('confidence', 'medium')} confidence)")
+                        
+                        # Risk factors
+                        if insights.get('risk_factors'):
+                            st.warning("**⚠️ Risk Factors:**")
+                            for risk in insights['risk_factors']:
+                                st.warning(f"• {risk}")
+                        
+                        # Pattern signals
+                        if insights.get('pattern_signals'):
+                            st.info("**🔍 Pattern Signals:**")
+                            for signal in insights['pattern_signals']:
+                                if signal.get('actionable'):
+                                    st.info(f"📊 {signal['signal']}")
+                                else:
+                                    st.caption(f"ℹ️ {signal['signal']}")
+                    
+                    # Pattern learning insights
+                    st.subheader("🎓 Pattern Education")
+                    
+                    with st.expander("📚 Learn About Detected Patterns"):
+                        if candlestick_analysis.get('recent_patterns'):
+                            pattern_education = {
+                                'Doji': "Indicates market indecision. Price opened and closed at nearly the same level.",
+                                'Hammer': "Bullish reversal pattern. Small body with long lower shadow, suggesting rejection of lower prices.",
+                                'Shooting Star': "Bearish reversal pattern. Small body with long upper shadow, suggesting rejection of higher prices.",
+                                'Engulfing Pattern': "Strong reversal signal. The current candle completely engulfs the previous candle's body.",
+                                'Morning Star': "Bullish reversal pattern consisting of three candles: bearish, small body, then bullish.",
+                                'Evening Star': "Bearish reversal pattern consisting of three candles: bullish, small body, then bearish.",
+                                'Three White Soldiers': "Strong bullish continuation pattern with three consecutive long bullish candles.",
+                                'Three Black Crows': "Strong bearish continuation pattern with three consecutive long bearish candles.",
+                                'Harami Pattern': "Reversal pattern where a small candle is contained within the previous larger candle.",
+                                'Dark Cloud Cover': "Bearish reversal pattern where a bearish candle opens above and closes below the midpoint of the previous bullish candle."
+                            }
+                            
+                            unique_patterns = set(p['name'] for p in candlestick_analysis['recent_patterns'])
+                            for pattern_name in unique_patterns:
+                                for edu_pattern, description in pattern_education.items():
+                                    if edu_pattern.lower() in pattern_name.lower():
+                                        st.write(f"**{pattern_name}**: {description}")
+                                        break
+                    
+                    st.caption("💡 Candlestick patterns are more reliable when confirmed by volume, support/resistance levels, and other technical indicators.")
+                
+                else:
+                    st.info("🔍 No candlestick patterns detected in this dataset")
+                    
+                    # Show debugging information
+                    stats = candlestick_analysis.get('statistics', {})
+                    data_length = stats.get('data_length', 0)
+                    
+                    if data_length > 0:
+                        st.caption(f"📊 Analyzed {data_length} candlesticks with no pattern formations detected")
+                        st.caption("This could indicate:")
+                        st.caption("• Strong trending market without reversal signals")
+                        st.caption("• Low volatility period with minimal pattern formation")
+                        st.caption("• Very recent/limited data (patterns need sufficient history)")
+                        st.caption("• Market in tight consolidation phase")
+                        
+                        if data_length < 50:
+                            st.warning(f"⚠️ Limited data ({data_length} candles) - patterns are more reliable with 100+ candles")
+                    else:
+                        st.error("❌ No valid data available for pattern analysis")
+                        st.caption("• Check if the symbol has sufficient trading history")
+                        st.caption("• Try a different timeframe or symbol")
+                
+            except Exception as e:
+                logging.error(f"Error in candlestick pattern analysis: {str(e)}")
+                st.error(f"Error analyzing candlestick patterns: {str(e)}")
+                st.info("This feature requires TA-Lib to be properly installed. Pattern analysis will be skipped.")
 
 except Exception as e:
     logging.error(f"Application error: {str(e)}")

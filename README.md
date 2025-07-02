@@ -8,6 +8,7 @@ Enhanced cryptocurrency prediction application with SPOT and FUTURES market supp
 - 🚀 **FUTURES Markets** - Futures trading analysis and predictions  
 - 🤖 **AI Predictions** - LSTM-based predictions for 1h, 4h, 8h, 24h horizons
 - 📊 **Technical Analysis** - MACD, RSI, Bollinger Bands, and more
+- 🕯️ **Candlestick Pattern Recognition** - AI-powered detection of 61+ candlestick patterns
 - 🌐 **CryptoCompare Integration** - Enhanced predictions for ALL cryptocurrencies with comprehensive market data
 - 🧠 **Advanced Sentiment Analysis** - Multi-factor sentiment scoring for every cryptocurrency
 - 🔍 **Multi-Source Validation** - Price comparison and cross-validation across data sources
@@ -35,10 +36,12 @@ Enhanced cryptocurrency prediction application with SPOT and FUTURES market supp
 - `app_enhanced.py` - Streamlit web application
 - `data_loader.py` - SPOT market data handling
 - `futures_data_loader.py` - FUTURES market data handling
-- `cryptocompare_data_loader.py` - **NEW**: CryptoCompare API integration for universal cryptocurrency analysis
+- `cryptocompare_data_loader.py` - CryptoCompare API integration for universal cryptocurrency analysis
+- `trading_pattern_analyzer.py` - **NEW**: Advanced pattern recognition with 61+ candlestick patterns
 - `predictor.py` - LSTM predictor for SPOT markets
 - `futures_predictor.py` - Enhanced LSTM predictor for FUTURES
 - `translations.py` - Multi-language support
+- `TALIB_INSTALLATION.md` - **NEW**: TA-Lib installation guide for pattern recognition
 
 ## 🔧 Configuration
 
@@ -95,6 +98,53 @@ Add your CryptoCompare API key to environment variables:
 ```bash
 export CRYPTOCOMPARE_API_KEY="your_api_key_here"
 ```
+
+## 🕯️ Candlestick Pattern Recognition
+
+Advanced AI-powered candlestick pattern recognition system using TA-Lib for professional technical analysis.
+
+### Features:
+- **61+ Pattern Detection** - Complete library of candlestick patterns including:
+  - **Reversal Patterns**: Doji, Hammer, Shooting Star, Engulfing, Morning/Evening Star
+  - **Continuation Patterns**: Three White Soldiers, Three Black Crows, Rising/Falling Three Methods
+  - **Indecision Patterns**: Spinning Top, High-Wave Candle, Long-Legged Doji
+- **Visual Pattern Markers** - Patterns highlighted directly on price charts with color coding
+- **Market Sentiment Analysis** - AI-powered sentiment scoring based on detected patterns
+- **Pattern Classification** - Automatic categorization by bullish/bearish and reversal/continuation
+- **Educational Insights** - Learn about each pattern as it's detected
+- **Trading Signals** - Enhanced signals combining patterns with volume and support/resistance
+
+### Pattern Categories:
+- 🟢 **Bullish Reversal** - Patterns suggesting upward price reversals
+- 🔴 **Bearish Reversal** - Patterns suggesting downward price reversals  
+- ➡️ **Continuation** - Patterns suggesting trend continuation
+- ⚪ **Indecision** - Patterns showing market uncertainty
+- 🔄 **General Reversal** - Patterns that can be bullish or bearish
+
+### Technical Implementation:
+- **TA-Lib Integration** - Professional-grade pattern recognition library
+- **Real-time Detection** - Patterns detected on every data update
+- **Historical Analysis** - Pattern frequency and reliability tracking
+- **Chart Integration** - Seamlessly integrated with existing technical analysis charts
+- **Performance Optimized** - Efficient pattern scanning with caching
+
+### Installation:
+The candlestick pattern recognition requires TA-Lib installation. See `TALIB_INSTALLATION.md` for detailed setup instructions.
+
+```bash
+# Quick install (macOS with Homebrew)
+brew install ta-lib
+pip install TA-Lib
+
+# For other systems, see TALIB_INSTALLATION.md
+```
+
+### Usage:
+1. Enable "Candlestick Pattern Analysis" in the sidebar
+2. Patterns will be automatically detected and displayed
+3. View pattern categories in organized tabs
+4. Check the enhanced chart with pattern markers
+5. Read educational insights about detected patterns
 
 ## Language Support
 
