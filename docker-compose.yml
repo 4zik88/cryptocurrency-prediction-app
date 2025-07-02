@@ -1,0 +1,74 @@
+version: '3.8'
+
+services:
+  nginx:
+    image: nginx:alpine
+    container_name: ai-crypto-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - app1
+      - app2
+      - app3
+    restart: unless-stopped
+    networks:
+      - ai-crypto-network
+
+  app1:
+    build: .
+    container_name: ai-crypto-app1
+    environment:
+      - CRYPTOCOMPARE_API_KEY=${CRYPTOCOMPARE_API_KEY}
+      - CONSOLE_LANGUAGE=${CONSOLE_LANGUAGE:-en}
+    volumes:
+      - ./.streamlit:/app/.streamlit:ro
+    restart: unless-stopped
+    networks:
+      - ai-crypto-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  app2:
+    build: .
+    container_name: ai-crypto-app2
+    environment:
+      - CRYPTOCOMPARE_API_KEY=${CRYPTOCOMPARE_API_KEY}
+      - CONSOLE_LANGUAGE=${CONSOLE_LANGUAGE:-en}
+    volumes:
+      - ./.streamlit:/app/.streamlit:ro
+    restart: unless-stopped
+    networks:
+      - ai-crypto-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  app3:
+    build: .
+    container_name: ai-crypto-app3
+    environment:
+      - CRYPTOCOMPARE_API_KEY=${CRYPTOCOMPARE_API_KEY}
+      - CONSOLE_LANGUAGE=${CONSOLE_LANGUAGE:-en}
+    volumes:
+      - ./.streamlit:/app/.streamlit:ro
+    restart: unless-stopped
+    networks:
+      - ai-crypto-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+networks:
+  ai-crypto-network:
+    driver: bridge 

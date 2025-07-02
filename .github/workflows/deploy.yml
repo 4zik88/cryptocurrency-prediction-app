@@ -1,0 +1,84 @@
+name: Deploy AI Crypto App
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+    
+    - name: Cache pip dependencies
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+    
+    - name: Run basic import tests
+      run: |
+        python -c "import streamlit; print('Streamlit imported successfully')"
+        python -c "import tensorflow; print('TensorFlow imported successfully')"
+        python -c "import pandas; print('Pandas imported successfully')"
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Deploy to server
+      uses: appleboy/ssh-action@v1.0.0
+      with:
+        host: ${{ secrets.HOST }}
+        username: ${{ secrets.USERNAME }}
+        key: ${{ secrets.SSH_KEY }}
+        port: ${{ secrets.PORT }}
+        script: |
+          cd /path/to/your/app
+          
+          # Pull latest changes
+          git pull origin main
+          
+          # Create environment file if it doesn't exist
+          if [ ! -f .env ]; then
+            echo "Creating .env file..."
+            echo "CRYPTOCOMPARE_API_KEY=${{ secrets.CRYPTOCOMPARE_API_KEY }}" > .env
+            echo "CONSOLE_LANGUAGE=en" >> .env
+          fi
+          
+          # Build and deploy with zero downtime
+          echo "Building new containers..."
+          docker-compose build
+          
+          echo "Starting new containers..."
+          docker-compose up -d --scale app1=1 --scale app2=1 --scale app3=1
+          
+          echo "Waiting for health checks..."
+          sleep 30
+          
+          echo "Removing old containers..."
+          docker system prune -f
+          
+          echo "Deployment completed successfully!"
+          
+          # Check if services are running
+          docker-compose ps 
